@@ -158,6 +158,14 @@ export default function LeafletRiskMap() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [showHeatmap, setShowHeatmap] = useState(true);
 
+  const isEmbeddedPreview = useMemo(() => {
+    try {
+      return window.self !== window.top;
+    } catch {
+      return true;
+    }
+  }, []);
+
   const [mapCenter, setMapCenter] = useState<[number, number]>([40.7128, -74.006]);
   const [mapZoom, setMapZoom] = useState(14);
 
@@ -196,12 +204,9 @@ export default function LeafletRiskMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update view when center/zoom changes programmatically
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    map.setView(mapCenter, mapZoom, { animate: true, duration: 0.6 });
-  }, [mapCenter, mapZoom]);
+  // Note: we intentionally do NOT mirror React state back into map.setView()
+  // because Leaflet emits move events that would cause a render loop.
+  // We only move the map programmatically (e.g. on "My Location").
 
   // Render risk markers
   useEffect(() => {
@@ -324,24 +329,54 @@ export default function LeafletRiskMap() {
       return;
     }
 
+    // In some embedded/preview iframes, browsers block geolocation.
+    if (isEmbeddedPreview) {
+      setLocationError(
+        "Location is blocked in embedded preview. Open the app in a new tab / published URL, then tap 'My Location' again."
+      );
+      setIsLocating(false);
+      return;
+    }
+
+    if (!window.isSecureContext) {
+      setLocationError("Location requires HTTPS. Please open the app on HTTPS and try again.");
+      setIsLocating(false);
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const newLocation = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
+
         setUserLocation(newLocation);
         setMapCenter([newLocation.lat, newLocation.lng]);
         setMapZoom(16);
+
+        // Move the map directly (avoid React ↔ Leaflet feedback loop)
+        mapRef.current?.flyTo([newLocation.lat, newLocation.lng], 16, { animate: true, duration: 0.8 });
+
         setIsLocating(false);
       },
       (error) => {
-        setLocationError(`Unable to retrieve location: ${error.message}`);
+        if (error.code === 1) {
+          setLocationError(
+            "Location permission denied. Please allow location access in your browser settings, then try again."
+          );
+        } else if (error.code === 2) {
+          setLocationError("Location unavailable. Please check GPS/network and try again.");
+        } else if (error.code === 3) {
+          setLocationError("Location request timed out. Please try again.");
+        } else {
+          setLocationError(`Unable to retrieve location: ${error.message}`);
+        }
         setIsLocating(false);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
     );
-  }, []);
+  }, [isEmbeddedPreview]);
 
   const safetySuggestions = useMemo(() => {
     if (!userLocation) return null;
@@ -456,20 +491,27 @@ export default function LeafletRiskMap() {
         </motion.div>
 
         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="pointer-events-auto">
-          <Button
-            variant="glass"
-            size="sm"
-            onClick={handleLocateUser}
-            disabled={isLocating}
-            className="shadow-xl bg-card/90 backdrop-blur-xl border-border/50"
-          >
-            {isLocating ? (
-              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Locate className="w-4 h-4" />
+          <div className="flex flex-col items-end">
+            <Button
+              variant="glass"
+              size="sm"
+              onClick={handleLocateUser}
+              disabled={isLocating}
+              className="shadow-xl bg-card/90 backdrop-blur-xl border-border/50"
+            >
+              {isLocating ? (
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Locate className="w-4 h-4" />
+              )}
+              <span className="ml-2">{userLocation ? "Update" : "My Location"}</span>
+            </Button>
+            {isEmbeddedPreview && (
+              <p className="mt-1 text-[10px] text-muted-foreground/80 max-w-[220px] text-right">
+                Preview may block GPS. Open in new tab for live location.
+              </p>
             )}
-            <span className="ml-2">{userLocation ? "Update" : "My Location"}</span>
-          </Button>
+          </div>
         </motion.div>
       </div>
 
