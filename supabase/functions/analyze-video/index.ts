@@ -12,26 +12,78 @@ serve(async (req) => {
   }
 
   try {
+    // 1. Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('Missing authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // 2. Create client with user's JWT for verification
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: authHeader }
+      }
+    });
+
+    // 3. Verify user is authenticated
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      console.error('Auth verification failed:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 4. Parse request
     const { videoName, videoSize, videoType, analysisId } = await req.json();
     
+    console.log(`User ${user.id} analyzing video: ${videoName}`);
+
+    // 5. Verify user owns the analysis record
+    const { data: analysis, error: checkError } = await supabaseClient
+      .from('video_analyses')
+      .select('user_id')
+      .eq('id', analysisId)
+      .single();
+    
+    if (checkError || !analysis) {
+      console.error('Analysis not found:', checkError);
+      return new Response(
+        JSON.stringify({ error: 'Analysis not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (analysis.user_id !== user.id) {
+      console.error(`Access denied: user ${user.id} tried to access analysis owned by ${analysis.user_id}`);
+      return new Response(
+        JSON.stringify({ error: 'Access denied' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // 6. Create service role client for database updates
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    console.log(`Analyzing video: ${videoName}, size: ${videoSize}, type: ${videoType}`);
-
     // Update status to processing
-    if (analysisId) {
-      await supabase
-        .from('video_analyses')
-        .update({ status: 'processing' })
-        .eq('id', analysisId);
-    }
+    await supabase
+      .from('video_analyses')
+      .update({ status: 'processing' })
+      .eq('id', analysisId);
 
     // Create the analysis prompt for Lovable AI
     const analysisPrompt = `You are an expert traffic accident analyst and road safety specialist. Analyze this uploaded traffic/accident video file and provide a comprehensive accident analysis report.
@@ -107,12 +159,11 @@ Provide your analysis in the following JSON format ONLY (no additional text):
     const aiResponse = await response.json();
     const content = aiResponse.choices?.[0]?.message?.content;
     
-    console.log("AI Response received:", content?.substring(0, 200));
+    console.log("AI Response received for user:", user.id);
 
     // Parse the JSON response
     let analysisResult;
     try {
-      // Clean the response - remove markdown code blocks if present
       let cleanContent = content.trim();
       if (cleanContent.startsWith('```json')) {
         cleanContent = cleanContent.slice(7);
@@ -126,32 +177,29 @@ Provide your analysis in the following JSON format ONLY (no additional text):
       analysisResult = JSON.parse(cleanContent.trim());
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
-      console.error("Raw content:", content);
       throw new Error("Failed to parse AI analysis response");
     }
 
     // Update the database with results
-    if (analysisId) {
-      const { error: updateError } = await supabase
-        .from('video_analyses')
-        .update({
-          status: 'completed',
-          primary_cause: analysisResult.primary_cause,
-          primary_cause_confidence: analysisResult.primary_cause_confidence,
-          secondary_factors: analysisResult.secondary_factors,
-          timeline_events: analysisResult.timeline_events,
-          ai_insights: analysisResult.ai_insights,
-          prevention_recommendations: analysisResult.prevention_recommendations,
-          detected_vehicles: analysisResult.detected_vehicles,
-          speed_patterns: analysisResult.speed_patterns,
-          behaviors_detected: analysisResult.behaviors_detected,
-          raw_ai_response: aiResponse,
-        })
-        .eq('id', analysisId);
+    const { error: updateError } = await supabase
+      .from('video_analyses')
+      .update({
+        status: 'completed',
+        primary_cause: analysisResult.primary_cause,
+        primary_cause_confidence: analysisResult.primary_cause_confidence,
+        secondary_factors: analysisResult.secondary_factors,
+        timeline_events: analysisResult.timeline_events,
+        ai_insights: analysisResult.ai_insights,
+        prevention_recommendations: analysisResult.prevention_recommendations,
+        detected_vehicles: analysisResult.detected_vehicles,
+        speed_patterns: analysisResult.speed_patterns,
+        behaviors_detected: analysisResult.behaviors_detected,
+        raw_ai_response: aiResponse,
+      })
+      .eq('id', analysisId);
 
-      if (updateError) {
-        console.error("Failed to update analysis:", updateError);
-      }
+    if (updateError) {
+      console.error("Failed to update analysis:", updateError);
     }
 
     return new Response(JSON.stringify({ 

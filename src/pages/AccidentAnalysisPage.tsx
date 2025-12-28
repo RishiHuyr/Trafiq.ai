@@ -135,6 +135,13 @@ export default function AccidentAnalysisPage() {
   const startAnalysis = useCallback(async () => {
     if (!videoFile) return;
 
+    // Verify user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('Authentication required', { description: 'Please login to analyze videos' });
+      return;
+    }
+
     setIsAnalyzing(true);
     setAnalysisProgress(0);
 
@@ -147,10 +154,11 @@ export default function AccidentAnalysisPage() {
     }, 300);
 
     try {
-      // First create a record in the database
+      // First create a record in the database with user_id
       const { data: insertData, error: insertError } = await supabase
         .from('video_analyses')
         .insert({
+          user_id: user.id,
           video_name: videoFile.name,
           video_size: videoFile.size,
           video_type: videoFile.type,
