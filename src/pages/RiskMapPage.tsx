@@ -1,10 +1,8 @@
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { 
   MapPin, 
   AlertTriangle, 
@@ -13,21 +11,13 @@ import {
   Clock,
   Car,
   Shield,
-  Key,
-  ExternalLink,
 } from 'lucide-react';
-import { riskZones, getRiskLevelColor } from '@/lib/mockData';
+import { riskZones } from '@/lib/mockData';
 import GoogleMapRisk from '@/components/map/GoogleMapRisk';
 
-export default function RiskMapPage() {
-  const [googleMapsApiKey, setGoogleMapsApiKey] = useState('');
-  const [isKeySubmitted, setIsKeySubmitted] = useState(false);
+const GOOGLE_MAPS_API_KEY = 'AIzaSyAP6RpkgRWtGvDW1HVx4bJX0QIrSO5S7_o';
 
-  const handleApiKeySubmit = () => {
-    if (googleMapsApiKey.trim()) {
-      setIsKeySubmitted(true);
-    }
-  };
+export default function RiskMapPage() {
 
   return (
     <DashboardLayout>
@@ -69,53 +59,7 @@ export default function RiskMapPage() {
           >
             <Card className="overflow-hidden h-[600px]">
               <CardContent className="p-0 h-full relative">
-                {!isKeySubmitted ? (
-                  /* API Key Input */
-                  <div className="absolute inset-0 bg-gradient-to-br from-background via-sidebar to-background flex items-center justify-center">
-                    <div className="max-w-md w-full p-6">
-                      <div className="text-center mb-6">
-                        <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                          <Key className="w-8 h-8 text-primary" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-foreground mb-2">
-                          Google Maps API Key Required
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Enter your Google Maps API key to enable the interactive risk map with heatmaps and location features.
-                        </p>
-                      </div>
-                      <div className="space-y-4">
-                        <Input
-                          type="password"
-                          placeholder="Enter your Google Maps API key"
-                          value={googleMapsApiKey}
-                          onChange={(e) => setGoogleMapsApiKey(e.target.value)}
-                          className="bg-muted/50"
-                        />
-                        <Button 
-                          variant="glow" 
-                          className="w-full"
-                          onClick={handleApiKeySubmit}
-                          disabled={!googleMapsApiKey.trim()}
-                        >
-                          <MapPin className="w-4 h-4 mr-2" />
-                          Enable Google Maps
-                        </Button>
-                        <a 
-                          href="https://developers.google.com/maps/documentation/javascript/get-api-key" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          Get a Google Maps API key
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <GoogleMapRisk apiKey={googleMapsApiKey} />
-                )}
+                <GoogleMapRisk apiKey={GOOGLE_MAPS_API_KEY} />
               </CardContent>
             </Card>
           </motion.div>
