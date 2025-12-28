@@ -1,170 +1,325 @@
-import { useCallback, useState, useMemo, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
-import { motion, AnimatePresence } from 'framer-motion';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { AlertTriangle, Camera, MapPin, Navigation, Shield, Zap, Locate, Layers, Plus, Minus } from 'lucide-react';
-import { riskZones, getRiskLevelColor } from '@/lib/mockData';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { motion, AnimatePresence } from "framer-motion";
+import { AlertTriangle, Camera, Layers, Locate, MapPin, Plus, Minus, Shield, Zap } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { riskZones } from "@/lib/mockData";
 
 interface UserLocation {
   lat: number;
   lng: number;
 }
 
-// Custom marker icons
+const riskColorToken = (riskLevel: string) => {
+  switch (riskLevel) {
+    case "critical":
+    case "high":
+      return "--destructive";
+    case "medium":
+      return "--warning";
+    default:
+      return "--success";
+  }
+};
+
+const hslVar = (token: string, alpha?: number) =>
+  alpha == null ? `hsl(var(${token}))` : `hsl(var(${token}) / ${alpha})`;
+
 const createRiskIcon = (riskLevel: string, riskScore: number) => {
-  const color = riskLevel === 'critical' ? '#ef4444' : 
-                riskLevel === 'high' ? '#f97316' : 
-                riskLevel === 'medium' ? '#eab308' : '#22c55e';
-  
+  const token = riskColorToken(riskLevel);
+  const color = hslVar(token);
+  const bg = hslVar(token, 0.14);
+  const glow = hslVar(token, 0.45);
+
   return L.divIcon({
-    className: 'custom-risk-marker',
+    className: "leaflet-risk-marker",
     html: `
       <div style="
         width: 40px;
         height: 40px;
-        border-radius: 50%;
-        background: ${color}22;
+        border-radius: 9999px;
+        background: ${bg};
         border: 3px solid ${color};
         display: flex;
         align-items: center;
         justify-content: center;
-        font-weight: bold;
+        font-weight: 700;
         font-size: 12px;
         color: ${color};
-        box-shadow: 0 0 20px ${color}60;
+        box-shadow: 0 0 18px ${glow};
         position: relative;
+        backdrop-filter: blur(10px);
       ">
         ${riskScore}
-        ${(riskLevel === 'critical' || riskLevel === 'high') ? `
+        ${
+          riskLevel === "critical" || riskLevel === "high"
+            ? `
           <div style="
             position: absolute;
-            inset: -4px;
-            border-radius: 50%;
+            inset: -5px;
+            border-radius: 9999px;
             border: 2px solid ${color};
-            animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-            opacity: 0.5;
+            animation: leafPing 1.6s cubic-bezier(0,0,0.2,1) infinite;
+            opacity: 0.6;
           "></div>
-        ` : ''}
+        `
+            : ""
+        }
       </div>
     `,
     iconSize: [40, 40],
     iconAnchor: [20, 20],
-    popupAnchor: [0, -20],
+    popupAnchor: [0, -18],
   });
 };
 
-const cameraIcon = L.divIcon({
-  className: 'custom-camera-marker',
-  html: `
-    <div style="
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: rgba(34, 197, 94, 0.2);
-      border: 2px solid rgba(34, 197, 94, 0.6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    ">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
-        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-        <circle cx="12" cy="13" r="4"/>
-      </svg>
-    </div>
-  `,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-});
+const cameraIcon = () => {
+  const color = hslVar("--success");
+  const bg = hslVar("--success", 0.14);
+  const border = hslVar("--success", 0.55);
 
-const userLocationIcon = L.divIcon({
-  className: 'user-location-marker',
-  html: `
-    <div style="position: relative;">
+  return L.divIcon({
+    className: "leaflet-camera-marker",
+    html: `
       <div style="
-        position: absolute;
-        inset: -8px;
-        border-radius: 50%;
-        background: rgba(59, 130, 246, 0.3);
-        animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
-      "></div>
-      <div style="
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        background: #3b82f6;
-        border: 4px solid white;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      "></div>
-    </div>
-  `,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: ${bg};
+        border: 2px solid ${border};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 10px 24px hsl(var(--foreground) / 0.15);
+      ">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+};
+
+const userLocationIcon = () => {
+  const color = hslVar("--primary");
+  const ping = hslVar("--primary", 0.22);
+
+  return L.divIcon({
+    className: "leaflet-user-marker",
+    html: `
+      <div style="position: relative;">
+        <div style="
+          position: absolute;
+          inset: -10px;
+          border-radius: 9999px;
+          background: ${ping};
+          animation: leafPing 2.2s cubic-bezier(0,0,0.2,1) infinite;
+        "></div>
+        <div style="
+          width: 22px;
+          height: 22px;
+          border-radius: 9999px;
+          background: ${color};
+          border: 4px solid hsl(var(--background));
+          box-shadow: 0 12px 28px hsl(var(--foreground) / 0.25);
+        "></div>
+      </div>
+    `,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+};
 
 // Mock camera locations
 const trafficCameras = [
-  { id: 'cam-1', lat: 40.7128, lng: -74.006, name: 'Downtown Cam A', status: 'active' },
-  { id: 'cam-2', lat: 40.7189, lng: -74.002, name: 'Main St Cam', status: 'active' },
-  { id: 'cam-3', lat: 40.7082, lng: -74.012, name: 'Bridge Cam', status: 'active' },
-  { id: 'cam-4', lat: 40.7250, lng: -73.998, name: 'Highway Cam', status: 'maintenance' },
+  { id: "cam-1", lat: 40.7128, lng: -74.006, name: "Downtown Cam A", status: "active" },
+  { id: "cam-2", lat: 40.7189, lng: -74.002, name: "Main St Cam", status: "active" },
+  { id: "cam-3", lat: 40.7082, lng: -74.012, name: "Bridge Cam", status: "active" },
+  { id: "cam-4", lat: 40.725, lng: -73.998, name: "Highway Cam", status: "maintenance" },
 ];
 
-// Map controller component for programmatic control
-function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    map.setView(center, zoom);
-  }, [center, zoom, map]);
-  
-  return null;
-}
-
-// Zoom controls component
-function ZoomControls() {
-  const map = useMap();
-  
-  return (
-    <div className="absolute right-4 top-1/2 -translate-y-1/2 z-[1000] flex flex-col gap-1">
-      <Button
-        variant="glass"
-        size="icon"
-        className="h-10 w-10 rounded-lg shadow-lg"
-        onClick={() => map.zoomIn()}
-      >
-        <Plus className="w-4 h-4" />
-      </Button>
-      <Button
-        variant="glass"
-        size="icon"
-        className="h-10 w-10 rounded-lg shadow-lg"
-        onClick={() => map.zoomOut()}
-      >
-        <Minus className="w-4 h-4" />
-      </Button>
-    </div>
-  );
-}
-
 export default function LeafletRiskMap() {
+  const mapElRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+
+  const riskMarkersRef = useRef<L.LayerGroup | null>(null);
+  const heatLayerRef = useRef<L.LayerGroup | null>(null);
+  const cameraLayerRef = useRef<L.LayerGroup | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
+
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState(true);
+
   const [mapCenter, setMapCenter] = useState<[number, number]>([40.7128, -74.006]);
   const [mapZoom, setMapZoom] = useState(14);
-  const [showHeatmap, setShowHeatmap] = useState(true);
+
+  // Init map once
+  useEffect(() => {
+    if (!mapElRef.current || mapRef.current) return;
+
+    const map = L.map(mapElRef.current, {
+      zoomControl: false,
+      attributionControl: false,
+      preferCanvas: true,
+      zoomSnap: 0.5,
+    }).setView(mapCenter, mapZoom);
+
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "© CARTO © OpenStreetMap",
+      maxZoom: 19,
+    }).addTo(map);
+
+    riskMarkersRef.current = L.layerGroup().addTo(map);
+    heatLayerRef.current = L.layerGroup().addTo(map);
+    cameraLayerRef.current = L.layerGroup().addTo(map);
+
+    map.on("moveend", () => {
+      const c = map.getCenter();
+      setMapCenter([c.lat, c.lng]);
+      setMapZoom(map.getZoom());
+    });
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Update view when center/zoom changes programmatically
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.setView(mapCenter, mapZoom, { animate: true, duration: 0.6 });
+  }, [mapCenter, mapZoom]);
+
+  // Render risk markers
+  useEffect(() => {
+    const group = riskMarkersRef.current;
+    if (!group) return;
+
+    group.clearLayers();
+
+    for (const zone of riskZones) {
+      const marker = L.marker([zone.lat, zone.lng], {
+        icon: createRiskIcon(zone.riskLevel, zone.riskScore),
+        keyboard: false,
+      });
+
+      const token = riskColorToken(zone.riskLevel);
+      const badgeBg = hslVar(token, 0.14);
+      const badgeFg = hslVar(token);
+
+      marker.bindPopup(
+        `
+        <div class="leaflet-popup-ui">
+          <div class="leaflet-popup-title">${zone.name}</div>
+          <div class="leaflet-popup-sub">${zone.incidents} incidents • ${zone.violations} violations</div>
+          <div class="leaflet-popup-sub">Peak: ${zone.peakHours}</div>
+          <div style="display:inline-flex;margin-top:10px;padding:4px 8px;border-radius:9999px;background:${badgeBg};color:${badgeFg};font-weight:700;font-size:10px;letter-spacing:0.08em;">
+            ${zone.riskLevel.toUpperCase()} RISK
+          </div>
+        </div>
+        `,
+        { closeButton: false }
+      );
+
+      marker.addTo(group);
+    }
+  }, []);
+
+  // Render cameras
+  useEffect(() => {
+    const group = cameraLayerRef.current;
+    if (!group) return;
+
+    group.clearLayers();
+    const icon = cameraIcon();
+
+    for (const cam of trafficCameras) {
+      const marker = L.marker([cam.lat, cam.lng], { icon, keyboard: false });
+      marker.bindPopup(
+        `
+        <div class="leaflet-popup-ui">
+          <div class="leaflet-popup-title">${cam.name}</div>
+          <div class="leaflet-popup-sub"><span style="color:${hslVar("--success")}">●</span> ${cam.status}</div>
+        </div>
+        `,
+        { closeButton: false }
+      );
+      marker.addTo(group);
+    }
+  }, []);
+
+  // Render heatmap circles
+  useEffect(() => {
+    const group = heatLayerRef.current;
+    if (!group) return;
+
+    group.clearLayers();
+    if (!showHeatmap) return;
+
+    for (const zone of riskZones) {
+      const token = riskColorToken(zone.riskLevel);
+      L.circle([zone.lat, zone.lng], {
+        radius: zone.riskScore * 18,
+        color: hslVar(token, 0.7),
+        weight: 1,
+        opacity: 0.6,
+        fillColor: hslVar(token, 0.25),
+        fillOpacity: 0.25,
+      }).addTo(group);
+    }
+  }, [showHeatmap]);
+
+  // Update user marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!userLocation) {
+      if (userMarkerRef.current) {
+        map.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+      }
+      return;
+    }
+
+    if (!userMarkerRef.current) {
+      userMarkerRef.current = L.marker([userLocation.lat, userLocation.lng], {
+        icon: userLocationIcon(),
+        keyboard: false,
+      }).addTo(map);
+      userMarkerRef.current.bindPopup(
+        `
+        <div class="leaflet-popup-ui">
+          <div class="leaflet-popup-title">Your Location</div>
+          <div class="leaflet-popup-sub">${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}</div>
+        </div>
+        `,
+        { closeButton: false }
+      );
+    } else {
+      userMarkerRef.current.setLatLng([userLocation.lat, userLocation.lng]);
+    }
+  }, [userLocation]);
 
   const handleLocateUser = useCallback(() => {
     setIsLocating(true);
     setLocationError(null);
 
     if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser');
+      setLocationError("Geolocation is not supported by your browser");
       setIsLocating(false);
       return;
     }
@@ -177,6 +332,7 @@ export default function LeafletRiskMap() {
         };
         setUserLocation(newLocation);
         setMapCenter([newLocation.lat, newLocation.lng]);
+        setMapZoom(16);
         setIsLocating(false);
       },
       (error) => {
@@ -187,144 +343,70 @@ export default function LeafletRiskMap() {
     );
   }, []);
 
-  // Calculate AI safety suggestions based on user location
   const safetySuggestions = useMemo(() => {
     if (!userLocation) return null;
 
-    const nearbyZones = riskZones.filter(zone => {
+    const nearbyZones = riskZones.filter((zone) => {
       const distance = Math.sqrt(
-        Math.pow(zone.lat - userLocation.lat, 2) + 
-        Math.pow(zone.lng - userLocation.lng, 2)
+        Math.pow(zone.lat - userLocation.lat, 2) + Math.pow(zone.lng - userLocation.lng, 2)
       );
       return distance < 0.02;
     });
 
-    const highestRisk = nearbyZones.sort((a, b) => b.riskScore - a.riskScore)[0];
+    const highestRisk = [...nearbyZones].sort((a, b) => b.riskScore - a.riskScore)[0];
     const hour = new Date().getHours();
     const isRushHour = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19);
     const isNight = hour >= 21 || hour <= 5;
 
     return {
-      overallRisk: highestRisk?.riskLevel || 'low',
+      overallRisk: highestRisk?.riskLevel || "low",
       riskScore: highestRisk?.riskScore || 15,
-      nearbyZones: nearbyZones.length,
       warnings: [
-        ...(isRushHour ? ['Rush hour traffic - expect delays and increased violation risk'] : []),
-        ...(isNight ? ['Reduced visibility - maintain safe following distance'] : []),
-        ...(highestRisk?.riskLevel === 'critical' ? [`Critical zone ahead: ${highestRisk.name}`] : []),
-        ...(highestRisk?.riskLevel === 'high' ? [`High-risk area nearby: ${highestRisk.name}`] : []),
+        ...(isRushHour ? ["Rush hour traffic - expect delays and increased violation risk"] : []),
+        ...(isNight ? ["Reduced visibility - maintain safe following distance"] : []),
+        ...(highestRisk?.riskLevel === "critical" ? [`Critical zone ahead: ${highestRisk.name}`] : []),
+        ...(highestRisk?.riskLevel === "high" ? [`High-risk area nearby: ${highestRisk.name}`] : []),
       ],
       recommendations: [
-        'Stay alert at intersections - 60% of accidents occur here',
-        ...(nearbyZones.length > 2 ? ['Multiple risk zones in area - reduce speed'] : []),
-        ...(isRushHour ? ['Consider alternate route to avoid congestion'] : []),
-        'Report any hazards to help protect other drivers',
+        "Stay alert at intersections - 60% of accidents occur here",
+        ...(nearbyZones.length > 2 ? ["Multiple risk zones in area - reduce speed"] : []),
+        ...(isRushHour ? ["Consider alternate route to avoid congestion"] : []),
+        "Report any hazards to help protect other drivers",
       ],
-      dangerousIntersections: nearbyZones.filter(z => z.riskLevel === 'high' || z.riskLevel === 'critical'),
+      dangerousIntersections: nearbyZones.filter((z) => z.riskLevel === "high" || z.riskLevel === "critical"),
     };
   }, [userLocation]);
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-xl">
-      {/* Leaflet Map */}
-      <MapContainer
-        center={mapCenter}
-        zoom={mapZoom}
-        className="h-full w-full z-0"
-        zoomControl={false}
-        attributionControl={false}
-        style={{ background: '#0a0a0f' }}
-      >
-        {/* Dark themed map tiles */}
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-        />
-        
-        <MapController center={mapCenter} zoom={mapZoom} />
-        <ZoomControls />
+      {/* Map canvas */}
+      <div ref={mapElRef} className="absolute inset-0 h-full w-full" aria-label="Live risk map" />
 
-        {/* Risk Zone Circles (Heatmap effect) */}
-        {showHeatmap && riskZones.map(zone => (
-          <Circle
-            key={`heatmap-${zone.id}`}
-            center={[zone.lat, zone.lng]}
-            radius={zone.riskScore * 15}
-            pathOptions={{
-              color: getRiskLevelColor(zone.riskLevel),
-              fillColor: getRiskLevelColor(zone.riskLevel),
-              fillOpacity: 0.2,
-              weight: 1,
-              opacity: 0.5,
-            }}
-          />
-        ))}
+      {/* Zoom controls */}
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 z-[1000] flex flex-col gap-1 pointer-events-auto">
+        <Button
+          variant="glass"
+          size="icon"
+          className="h-10 w-10 rounded-lg shadow-lg"
+          onClick={() => mapRef.current?.zoomIn()}
+          aria-label="Zoom in"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="glass"
+          size="icon"
+          className="h-10 w-10 rounded-lg shadow-lg"
+          onClick={() => mapRef.current?.zoomOut()}
+          aria-label="Zoom out"
+        >
+          <Minus className="h-4 w-4" />
+        </Button>
+      </div>
 
-        {/* Risk Zone Markers */}
-        {riskZones.map(zone => (
-          <Marker
-            key={zone.id}
-            position={[zone.lat, zone.lng]}
-            icon={createRiskIcon(zone.riskLevel, zone.riskScore)}
-          >
-            <Popup className="risk-popup">
-              <div className="bg-popover p-3 rounded-lg min-w-[180px]">
-                <h4 className="font-semibold text-sm text-foreground">{zone.name}</h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {zone.incidents} incidents • {zone.violations} violations
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Peak: {zone.peakHours}
-                </p>
-                <div className="mt-2 inline-flex px-2 py-0.5 rounded text-xs font-medium" style={{
-                  background: `${getRiskLevelColor(zone.riskLevel)}20`,
-                  color: getRiskLevelColor(zone.riskLevel)
-                }}>
-                  {zone.riskLevel.toUpperCase()} RISK
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Camera Markers */}
-        {trafficCameras.map(camera => (
-          <Marker
-            key={camera.id}
-            position={[camera.lat, camera.lng]}
-            icon={cameraIcon}
-          >
-            <Popup>
-              <div className="bg-popover p-2 rounded-lg">
-                <p className="font-medium text-sm text-foreground">{camera.name}</p>
-                <p className="text-xs text-success">● {camera.status}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* User Location Marker */}
-        {userLocation && (
-          <Marker
-            position={[userLocation.lat, userLocation.lng]}
-            icon={userLocationIcon}
-          >
-            <Popup>
-              <div className="bg-popover p-2 rounded-lg">
-                <p className="font-medium text-sm text-foreground">Your Location</p>
-                <p className="text-xs text-muted-foreground">
-                  {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}
-                </p>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-      </MapContainer>
-
-      {/* Top Controls */}
+      {/* Top controls */}
       <div className="absolute top-4 left-4 right-4 z-[1000] flex items-start justify-between pointer-events-none">
-        {/* Legend */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           className="bg-card/90 backdrop-blur-xl border border-border/50 rounded-xl p-3 shadow-2xl pointer-events-auto"
@@ -335,15 +417,15 @@ export default function LeafletRiskMap() {
           </p>
           <div className="space-y-1.5 text-[11px]">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+              <div className="w-3 h-3 rounded-full bg-success shadow-[0_0_12px_hsl(var(--success)/0.45)]" />
               <span className="text-muted-foreground">Low Risk Zone</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-warning shadow-[0_0_8px_rgba(234,179,8,0.5)]" />
+              <div className="w-3 h-3 rounded-full bg-warning shadow-[0_0_12px_hsl(var(--warning)/0.45)]" />
               <span className="text-muted-foreground">Medium Risk</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+              <div className="w-3 h-3 rounded-full bg-destructive shadow-[0_0_12px_hsl(var(--destructive)/0.45)]" />
               <span className="text-muted-foreground">High/Critical</span>
             </div>
             <div className="flex items-center gap-2">
@@ -351,31 +433,29 @@ export default function LeafletRiskMap() {
               <span className="text-muted-foreground">Traffic Camera</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+              <div className="w-3 h-3 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/0.45)]" />
               <span className="text-muted-foreground">Your Location</span>
             </div>
           </div>
-          
-          {/* Heatmap Toggle */}
+
           <div className="mt-3 pt-2 border-t border-border/50">
             <button
-              onClick={() => setShowHeatmap(!showHeatmap)}
-              className={`flex items-center gap-2 text-[11px] transition-colors ${showHeatmap ? 'text-primary' : 'text-muted-foreground'}`}
+              onClick={() => setShowHeatmap((v) => !v)}
+              className={`flex items-center gap-2 text-[11px] transition-colors ${showHeatmap ? "text-primary" : "text-muted-foreground"}`}
             >
-              <div className={`w-3 h-3 rounded border ${showHeatmap ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
-                {showHeatmap && <span className="text-[8px] text-white flex items-center justify-center">✓</span>}
+              <div
+                className={`w-3 h-3 rounded border flex items-center justify-center ${
+                  showHeatmap ? "bg-primary border-primary" : "border-muted-foreground"
+                }`}
+              >
+                {showHeatmap && <span className="text-[8px] text-primary-foreground">✓</span>}
               </div>
               Show Heatmap
             </button>
           </div>
         </motion.div>
 
-        {/* Location Button */}
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="pointer-events-auto"
-        >
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="pointer-events-auto">
           <Button
             variant="glass"
             size="sm"
@@ -388,15 +468,15 @@ export default function LeafletRiskMap() {
             ) : (
               <Locate className="w-4 h-4" />
             )}
-            <span className="ml-2">{userLocation ? 'Update' : 'My Location'}</span>
+            <span className="ml-2">{userLocation ? "Update" : "My Location"}</span>
           </Button>
         </motion.div>
       </div>
 
-      {/* Location Error */}
+      {/* Location error */}
       <AnimatePresence>
         {locationError && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -412,7 +492,7 @@ export default function LeafletRiskMap() {
         )}
       </AnimatePresence>
 
-      {/* AI Safety Suggestions Panel */}
+      {/* AI panel */}
       <AnimatePresence>
         {userLocation && safetySuggestions && (
           <motion.div
@@ -434,14 +514,11 @@ export default function LeafletRiskMap() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold" style={{ color: getRiskLevelColor(safetySuggestions.overallRisk) }}>
-                      {safetySuggestions.riskScore}
-                    </div>
+                    <div className="text-2xl font-bold text-foreground">{safetySuggestions.riskScore}</div>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Risk Score</p>
                   </div>
                 </div>
 
-                {/* Warnings */}
                 {safetySuggestions.warnings.length > 0 && (
                   <div className="mb-3 p-2 rounded-lg bg-warning/10 border border-warning/20 space-y-1">
                     {safetySuggestions.warnings.map((warning, i) => (
@@ -453,7 +530,6 @@ export default function LeafletRiskMap() {
                   </div>
                 )}
 
-                {/* Recommendations */}
                 <div className="space-y-1">
                   {safetySuggestions.recommendations.slice(0, 3).map((rec, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs">
@@ -463,7 +539,6 @@ export default function LeafletRiskMap() {
                   ))}
                 </div>
 
-                {/* Nearby Dangerous Intersections */}
                 {safetySuggestions.dangerousIntersections.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-border/50">
                     <p className="text-xs font-medium text-foreground mb-2 flex items-center gap-1">
@@ -471,14 +546,14 @@ export default function LeafletRiskMap() {
                       Nearby High-Risk Zones
                     </p>
                     <div className="space-y-1">
-                      {safetySuggestions.dangerousIntersections.slice(0, 2).map(zone => (
+                      {safetySuggestions.dangerousIntersections.slice(0, 2).map((zone) => (
                         <div key={zone.id} className="flex items-center justify-between text-xs p-1.5 rounded bg-muted/30">
                           <span className="text-muted-foreground">{zone.name}</span>
-                          <span 
+                          <span
                             className="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                            style={{ 
-                              background: `${getRiskLevelColor(zone.riskLevel)}20`,
-                              color: getRiskLevelColor(zone.riskLevel)
+                            style={{
+                              background: hslVar(riskColorToken(zone.riskLevel), 0.14),
+                              color: hslVar(riskColorToken(zone.riskLevel)),
                             }}
                           >
                             {zone.riskLevel.toUpperCase()}
@@ -494,37 +569,9 @@ export default function LeafletRiskMap() {
         )}
       </AnimatePresence>
 
-      {/* Attribution */}
-      <div className="absolute bottom-2 right-2 z-[1000] text-[9px] text-muted-foreground/50">
+      <div className="absolute bottom-2 right-2 z-[1000] text-[9px] text-muted-foreground/50 pointer-events-none">
         © CARTO • OpenStreetMap
       </div>
-
-      {/* CSS for Leaflet customization */}
-      <style>{`
-        .leaflet-container {
-          background: #0a0a0f !important;
-          font-family: inherit;
-        }
-        .leaflet-popup-content-wrapper {
-          background: transparent !important;
-          box-shadow: none !important;
-          padding: 0 !important;
-        }
-        .leaflet-popup-content {
-          margin: 0 !important;
-        }
-        .leaflet-popup-tip {
-          display: none !important;
-        }
-        .custom-risk-marker, .custom-camera-marker, .user-location-marker {
-          background: transparent !important;
-          border: none !important;
-        }
-        @keyframes ping {
-          0% { transform: scale(1); opacity: 0.8; }
-          75%, 100% { transform: scale(1.5); opacity: 0; }
-        }
-      `}</style>
     </div>
   );
 }
