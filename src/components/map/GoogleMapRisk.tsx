@@ -96,18 +96,11 @@ export default function GoogleMapRisk({ apiKey }: GoogleMapRiskProps) {
     };
   }, [userLocation]);
 
-  // Generate Google Maps Embed URL
+  // Generate Google Maps Embed URL with proper place search
   const mapUrl = useMemo(() => {
     const center = userLocation || defaultCenter;
-    const markers = riskZones.map(zone => 
-      `markers=color:${zone.riskLevel === 'critical' || zone.riskLevel === 'high' ? 'red' : zone.riskLevel === 'medium' ? 'orange' : 'green'}%7Clabel:${zone.riskScore}%7C${zone.lat},${zone.lng}`
-    ).join('&');
-    
-    const userMarker = userLocation 
-      ? `&markers=color:blue%7Clabel:U%7C${userLocation.lat},${userLocation.lng}` 
-      : '';
-    
-    return `https://www.google.com/maps/embed/v1/view?key=${apiKey}&center=${center.lat},${center.lng}&zoom=13&maptype=roadmap`;
+    // Use place mode for better visual with a center location
+    return `https://www.google.com/maps/embed/v1/place?key=${apiKey}&q=${center.lat},${center.lng}&zoom=14&maptype=roadmap`;
   }, [apiKey, userLocation, defaultCenter]);
 
   return (
@@ -116,10 +109,11 @@ export default function GoogleMapRisk({ apiKey }: GoogleMapRiskProps) {
       <iframe
         src={mapUrl}
         className="absolute inset-0 w-full h-full border-0"
-        style={{ filter: 'invert(90%) hue-rotate(180deg)' }}
+        style={{ filter: 'invert(90%) hue-rotate(180deg) saturate(1.2) brightness(0.9)' }}
         allowFullScreen
         loading="lazy"
         referrerPolicy="no-referrer-when-downgrade"
+        title="Google Maps Risk View"
       />
 
       {/* Custom overlay for risk zones */}
