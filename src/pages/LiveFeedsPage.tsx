@@ -1,25 +1,21 @@
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
   Camera, 
-  Play, 
-  Pause, 
-  Maximize2, 
-  Settings, 
   Car,
   AlertTriangle,
   Wifi,
-  WifiOff,
+  Eye,
   RefreshCw,
   Grid3X3,
   LayoutGrid,
-  Eye
+  Shield,
 } from 'lucide-react';
 import { cameraFeeds } from '@/lib/mockData';
 import { useState } from 'react';
+import EnhancedCameraFeed from '@/components/feeds/EnhancedCameraFeed';
 
 export default function LiveFeedsPage() {
   const [layout, setLayout] = useState<'grid' | 'featured'>('grid');
@@ -39,7 +35,7 @@ export default function LiveFeedsPage() {
               Live Camera Feeds
             </h1>
             <p className="text-muted-foreground mt-1">
-              Real-time monitoring with AI-powered detection overlays
+              Real-time monitoring with AI-powered risk detection and clean overlays
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -75,7 +71,7 @@ export default function LiveFeedsPage() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          className="grid grid-cols-2 md:grid-cols-5 gap-4"
         >
           <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20">
             <CardContent className="p-4 flex items-center gap-3">
@@ -125,10 +121,49 @@ export default function LiveFeedsPage() {
                 <p className="text-2xl font-bold text-destructive">
                   {cameraFeeds.reduce((acc, c) => acc + c.violations, 0)}
                 </p>
-                <p className="text-xs text-muted-foreground">Violations Detected</p>
+                <p className="text-xs text-muted-foreground">Violations</p>
               </div>
             </CardContent>
           </Card>
+          <Card className="bg-gradient-to-br from-accent/10 to-accent/5 border-accent/20">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-accent" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-accent">
+                  94.2%
+                </p>
+                <p className="text-xs text-muted-foreground">AI Accuracy</p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Legend */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.15 }}
+          className="flex items-center gap-6 px-4 py-3 bg-muted/30 rounded-lg border border-border"
+        >
+          <span className="text-xs font-medium text-muted-foreground">Detection Legend:</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-sm border-2 border-success" />
+            <span className="text-xs text-muted-foreground">Safe</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-sm border-2 border-warning" />
+            <span className="text-xs text-muted-foreground">Moderate Risk</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-sm border-2 border-destructive" />
+            <span className="text-xs text-muted-foreground">High Risk</span>
+          </div>
+          <div className="h-4 w-px bg-border" />
+          <span className="text-xs text-muted-foreground">
+            Labels show violation type + confidence score
+          </span>
         </motion.div>
 
         {/* Camera Grid */}
@@ -141,121 +176,12 @@ export default function LiveFeedsPage() {
               transition={{ delay: 0.15 + index * 0.05 }}
               className={layout === 'featured' && index === 0 ? 'lg:col-span-2 lg:row-span-2' : ''}
             >
-              <Card className={`overflow-hidden group ${selectedFeed === camera.id ? 'ring-2 ring-primary' : ''}`}>
-                <CardContent className="p-0">
-                  {/* Video Feed Simulation */}
-                  <div 
-                    className={`relative bg-gradient-to-br from-background via-muted to-background ${
-                      layout === 'featured' && index === 0 ? 'h-[400px]' : 'h-[220px]'
-                    }`}
-                  >
-                    {/* Simulated camera view */}
-                    <div className="absolute inset-0">
-                      {/* Road simulation */}
-                      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-muted-foreground/10 to-transparent" />
-                      
-                      {/* Detection boxes simulation */}
-                      <div className="absolute inset-0 p-4">
-                        {Array.from({ length: Math.min(camera.vehicleCount % 5 + 2, 4) }).map((_, i) => (
-                          <motion.div
-                            key={i}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.5 + i * 0.2, duration: 0.3 }}
-                            className="absolute border-2 border-primary rounded"
-                            style={{
-                              left: `${20 + i * 15 + Math.random() * 10}%`,
-                              top: `${30 + Math.random() * 30}%`,
-                              width: `${15 + Math.random() * 10}%`,
-                              height: `${20 + Math.random() * 15}%`,
-                            }}
-                          >
-                            <span className="absolute -top-5 left-0 text-[10px] bg-primary text-primary-foreground px-1 rounded">
-                              Vehicle {i + 1}
-                            </span>
-                          </motion.div>
-                        ))}
-                      </div>
-                      
-                      {/* Scan line animation */}
-                      <motion.div
-                        className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"
-                        animate={{ top: ['0%', '100%'] }}
-                        transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-                      />
-                    </div>
-
-                    {/* Status Badge */}
-                    <div className="absolute top-3 left-3">
-                      <Badge variant={
-                        camera.status === 'online' ? 'online' :
-                        camera.status === 'processing' ? 'processing' : 'offline'
-                      }>
-                        {camera.status === 'online' && <Wifi className="w-3 h-3 mr-1" />}
-                        {camera.status === 'offline' && <WifiOff className="w-3 h-3 mr-1" />}
-                        {camera.status === 'processing' && <RefreshCw className="w-3 h-3 mr-1 animate-spin" />}
-                        {camera.status}
-                      </Badge>
-                    </div>
-
-                    {/* Camera Name */}
-                    <div className="absolute top-3 right-3">
-                      <span className="text-xs font-mono bg-background/80 backdrop-blur-sm px-2 py-1 rounded text-foreground">
-                        {camera.name}
-                      </span>
-                    </div>
-
-                    {/* Live indicator */}
-                    <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 bg-destructive/90 px-2 py-1 rounded text-xs text-destructive-foreground">
-                        <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                        LIVE
-                      </div>
-                    </div>
-
-                    {/* Controls overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4 gap-2">
-                      <Button variant="glass" size="sm">
-                        <Play className="w-4 h-4" />
-                      </Button>
-                      <Button variant="glass" size="sm">
-                        <Pause className="w-4 h-4" />
-                      </Button>
-                      <Button variant="glass" size="sm">
-                        <Maximize2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="glass" size="sm">
-                        <Settings className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Camera Info */}
-                  <div className="p-4 border-t border-border">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-sm text-foreground">{camera.location}</p>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Car className="w-3 h-3" />
-                            {camera.vehicleCount} vehicles
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            {camera.violations} violations
-                          </span>
-                        </div>
-                      </div>
-                      <Badge variant={
-                        camera.riskLevel === 'high' ? 'riskHigh' :
-                        camera.riskLevel === 'medium' ? 'riskMedium' : 'riskLow'
-                      }>
-                        {camera.riskLevel}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <EnhancedCameraFeed
+                camera={camera}
+                isFeatured={layout === 'featured' && index === 0}
+                isSelected={selectedFeed === camera.id}
+                onSelect={() => setSelectedFeed(camera.id === selectedFeed ? null : camera.id)}
+              />
             </motion.div>
           ))}
         </div>

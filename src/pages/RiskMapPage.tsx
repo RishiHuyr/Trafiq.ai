@@ -1,24 +1,34 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { 
   MapPin, 
   AlertTriangle, 
-  TrendingUp, 
   Filter, 
   Layers,
-  ZoomIn,
-  ZoomOut,
-  Locate,
   Clock,
   Car,
-  Shield
+  Shield,
+  Key,
+  ExternalLink,
 } from 'lucide-react';
 import { riskZones, getRiskLevelColor } from '@/lib/mockData';
+import GoogleMapRisk from '@/components/map/GoogleMapRisk';
 
 export default function RiskMapPage() {
+  const [googleMapsApiKey, setGoogleMapsApiKey] = useState('');
+  const [isKeySubmitted, setIsKeySubmitted] = useState(false);
+
+  const handleApiKeySubmit = () => {
+    if (googleMapsApiKey.trim()) {
+      setIsKeySubmitted(true);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -33,7 +43,7 @@ export default function RiskMapPage() {
               Risk Map
             </h1>
             <p className="text-muted-foreground mt-1">
-              Real-time visualization of traffic risk zones across the monitored area
+              Real-time visualization with live location, heatmaps, and AI safety insights
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -44,10 +54,6 @@ export default function RiskMapPage() {
             <Button variant="outline" size="sm">
               <Layers className="w-4 h-4 mr-2" />
               Layers
-            </Button>
-            <Button variant="glow" size="sm">
-              <Locate className="w-4 h-4 mr-2" />
-              My Location
             </Button>
           </div>
         </motion.div>
@@ -63,102 +69,53 @@ export default function RiskMapPage() {
           >
             <Card className="overflow-hidden h-[600px]">
               <CardContent className="p-0 h-full relative">
-                {/* Stylized Map Background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-background via-sidebar to-background">
-                  {/* Grid overlay */}
-                  <div 
-                    className="absolute inset-0 opacity-20"
-                    style={{
-                      backgroundImage: `
-                        linear-gradient(hsl(var(--primary) / 0.1) 1px, transparent 1px),
-                        linear-gradient(90deg, hsl(var(--primary) / 0.1) 1px, transparent 1px)
-                      `,
-                      backgroundSize: '50px 50px'
-                    }}
-                  />
-                  
-                  {/* Risk zone markers */}
-                  {riskZones.map((zone, index) => {
-                    const left = 15 + (index % 3) * 30 + Math.random() * 10;
-                    const top = 15 + Math.floor(index / 3) * 40 + Math.random() * 10;
-                    return (
-                      <motion.div
-                        key={zone.id}
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ delay: 0.3 + index * 0.1 }}
-                        className="absolute cursor-pointer group"
-                        style={{ left: `${left}%`, top: `${top}%` }}
-                      >
-                        {/* Pulse animation for high risk */}
-                        {(zone.riskLevel === 'critical' || zone.riskLevel === 'high') && (
-                          <div 
-                            className="absolute inset-0 rounded-full animate-ping"
-                            style={{ 
-                              backgroundColor: getRiskLevelColor(zone.riskLevel),
-                              opacity: 0.3
-                            }}
-                          />
-                        )}
-                        
-                        {/* Marker */}
-                        <div 
-                          className="relative w-12 h-12 rounded-full flex items-center justify-center border-2 shadow-lg transform group-hover:scale-110 transition-transform"
-                          style={{ 
-                            backgroundColor: `${getRiskLevelColor(zone.riskLevel)}20`,
-                            borderColor: getRiskLevelColor(zone.riskLevel),
-                            boxShadow: `0 0 20px ${getRiskLevelColor(zone.riskLevel)}40`
-                          }}
+                {!isKeySubmitted ? (
+                  /* API Key Input */
+                  <div className="absolute inset-0 bg-gradient-to-br from-background via-sidebar to-background flex items-center justify-center">
+                    <div className="max-w-md w-full p-6">
+                      <div className="text-center mb-6">
+                        <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                          <Key className="w-8 h-8 text-primary" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-foreground mb-2">
+                          Google Maps API Key Required
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Enter your Google Maps API key to enable the interactive risk map with heatmaps and location features.
+                        </p>
+                      </div>
+                      <div className="space-y-4">
+                        <Input
+                          type="password"
+                          placeholder="Enter your Google Maps API key"
+                          value={googleMapsApiKey}
+                          onChange={(e) => setGoogleMapsApiKey(e.target.value)}
+                          className="bg-muted/50"
+                        />
+                        <Button 
+                          variant="glow" 
+                          className="w-full"
+                          onClick={handleApiKeySubmit}
+                          disabled={!googleMapsApiKey.trim()}
                         >
-                          <span className="text-xs font-bold" style={{ color: getRiskLevelColor(zone.riskLevel) }}>
-                            {zone.riskScore}
-                          </span>
-                        </div>
-                        
-                        {/* Tooltip */}
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                          <div className="bg-popover border border-border rounded-lg p-3 shadow-xl min-w-[200px]">
-                            <p className="font-semibold text-sm text-foreground">{zone.name}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {zone.incidents} incidents • {zone.violations} violations
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                  
-                  {/* Map controls */}
-                  <div className="absolute right-4 top-4 flex flex-col gap-2">
-                    <Button variant="glass" size="icon" className="w-10 h-10">
-                      <ZoomIn className="w-4 h-4" />
-                    </Button>
-                    <Button variant="glass" size="icon" className="w-10 h-10">
-                      <ZoomOut className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  
-                  {/* Legend */}
-                  <div className="absolute left-4 bottom-4 bg-popover/90 backdrop-blur-sm border border-border rounded-lg p-4">
-                    <p className="text-xs font-semibold text-foreground mb-3">Risk Levels</p>
-                    <div className="space-y-2">
-                      {[
-                        { level: 'critical', label: 'Critical (80-100)' },
-                        { level: 'high', label: 'High (60-79)' },
-                        { level: 'medium', label: 'Medium (40-59)' },
-                        { level: 'low', label: 'Low (0-39)' },
-                      ].map(({ level, label }) => (
-                        <div key={level} className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: getRiskLevelColor(level) }}
-                          />
-                          <span className="text-xs text-muted-foreground">{label}</span>
-                        </div>
-                      ))}
+                          <MapPin className="w-4 h-4 mr-2" />
+                          Enable Google Maps
+                        </Button>
+                        <a 
+                          href="https://developers.google.com/maps/documentation/javascript/get-api-key" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          Get a Google Maps API key
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <GoogleMapRisk apiKey={googleMapsApiKey} />
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -177,7 +134,7 @@ export default function RiskMapPage() {
                   Active Risk Zones
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 max-h-[350px] overflow-y-auto">
                 {riskZones.map((zone, index) => (
                   <motion.div
                     key={zone.id}
@@ -251,6 +208,25 @@ export default function RiskMapPage() {
                   <span className="text-sm font-semibold text-success">
                     {riskZones.filter(z => z.riskLevel === 'low').length}
                   </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AI Safety Note */}
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-foreground mb-1">
+                      AI Safety Mode Active
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Share your location to receive personalized safety suggestions and real-time risk alerts.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
