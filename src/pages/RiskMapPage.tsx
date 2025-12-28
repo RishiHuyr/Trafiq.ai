@@ -13,12 +13,9 @@ import {
   Shield,
 } from 'lucide-react';
 import { riskZones } from '@/lib/mockData';
-import GoogleMapRisk from '@/components/map/GoogleMapRisk';
-
-const GOOGLE_MAPS_API_KEY = 'AIzaSyAP6RpkgRWtGvDW1HVx4bJX0QIrSO5S7_o';
+import LeafletRiskMap from '@/components/map/LeafletRiskMap';
 
 export default function RiskMapPage() {
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -59,7 +56,7 @@ export default function RiskMapPage() {
           >
             <Card className="overflow-hidden h-[600px]">
               <CardContent className="p-0 h-full relative">
-                <GoogleMapRisk apiKey={GOOGLE_MAPS_API_KEY} />
+                <LeafletRiskMap />
               </CardContent>
             </Card>
           </motion.div>
