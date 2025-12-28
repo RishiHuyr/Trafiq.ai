@@ -11,6 +11,7 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import AIInsightsPage from "./pages/AIInsightsPage";
 import AlertsPage from "./pages/AlertsPage";
 import SettingsPage from "./pages/SettingsPage";
+import AccidentAnalysisPage from "./pages/AccidentAnalysisPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/insights" element={<AIInsightsPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/accident-analysis" element={<AccidentAnalysisPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
