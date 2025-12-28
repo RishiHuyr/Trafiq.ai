@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import {
   Upload,
   Play,
@@ -27,15 +29,57 @@ import {
   Car,
   Gauge,
   MapPin,
+  Loader2,
 } from 'lucide-react';
 
-interface AnalysisResult {
-  id: string;
-  timestamp: number;
-  type: 'vehicle' | 'speed' | 'lane' | 'signal' | 'visibility' | 'behavior';
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  description: string;
+interface SecondaryFactor {
+  factor: string;
   confidence: number;
+  description: string;
+}
+
+interface DetectedVehicle {
+  type: string;
+  position: string;
+  speed_estimate: string;
+  behavior: string;
+}
+
+interface SpeedPattern {
+  vehicle: string;
+  estimated_speed: string;
+  speed_limit: string;
+  violation: boolean;
+}
+
+interface BehaviorDetected {
+  behavior: string;
+  severity: string;
+  timestamp_estimate: string;
+}
+
+interface TimelineEvent {
+  timestamp: string;
+  event: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+}
+
+interface PreventionRecommendation {
+  title: string;
+  description: string;
+  priority: string;
+}
+
+interface AnalysisData {
+  primary_cause: string;
+  primary_cause_confidence: number;
+  secondary_factors: SecondaryFactor[];
+  detected_vehicles: DetectedVehicle[];
+  speed_patterns: SpeedPattern[];
+  behaviors_detected: BehaviorDetected[];
+  timeline_events: TimelineEvent[];
+  ai_insights: string;
+  prevention_recommendations: PreventionRecommendation[];
 }
 
 interface KeyFrame {
@@ -46,14 +90,6 @@ interface KeyFrame {
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
 }
 
-interface AccidentCause {
-  id: string;
-  cause: string;
-  confidence: number;
-  contributing: string[];
-  prevention: string;
-}
-
 export default function AccidentAnalysisPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -62,49 +98,10 @@ export default function AccidentAnalysisPage() {
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [keyFrames, setKeyFrames] = useState<KeyFrame[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Simulated analysis results
-  const [analysisResults] = useState<AnalysisResult[]>([
-    { id: 'ar-1', timestamp: 2.3, type: 'speed', severity: 'high', description: 'Vehicle 1 exceeding speed limit by 25 km/h', confidence: 94 },
-    { id: 'ar-2', timestamp: 3.1, type: 'lane', severity: 'medium', description: 'Unsafe lane change without signal', confidence: 88 },
-    { id: 'ar-3', timestamp: 4.5, type: 'behavior', severity: 'critical', description: 'Aggressive acceleration detected', confidence: 91 },
-    { id: 'ar-4', timestamp: 5.2, type: 'visibility', severity: 'medium', description: 'Reduced visibility due to weather conditions', confidence: 82 },
-    { id: 'ar-5', timestamp: 6.8, type: 'signal', severity: 'high', description: 'Vehicle entered intersection during amber signal', confidence: 96 },
-    { id: 'ar-6', timestamp: 8.1, type: 'vehicle', severity: 'critical', description: 'Insufficient following distance - 0.8 seconds', confidence: 93 },
-  ]);
-
-  const [keyFrames] = useState<KeyFrame[]>([
-    { id: 'kf-1', timestamp: 4.5, thumbnail: '', description: 'Aggressive acceleration begins', riskLevel: 'high' },
-    { id: 'kf-2', timestamp: 6.8, thumbnail: '', description: 'Signal violation occurs', riskLevel: 'critical' },
-    { id: 'kf-3', timestamp: 7.9, thumbnail: '', description: 'Collision imminent - braking initiated', riskLevel: 'critical' },
-    { id: 'kf-4', timestamp: 8.1, thumbnail: '', description: 'Impact moment', riskLevel: 'critical' },
-  ]);
-
-  const [accidentCauses] = useState<AccidentCause[]>([
-    {
-      id: 'ac-1',
-      cause: 'Excessive Speed',
-      confidence: 94,
-      contributing: ['Poor weather visibility', 'Aggressive driving behavior'],
-      prevention: 'Implementing dynamic speed limits during adverse weather conditions and enhanced speed monitoring',
-    },
-    {
-      id: 'ac-2',
-      cause: 'Signal Violation',
-      confidence: 91,
-      contributing: ['Rushing to beat amber light', 'Distracted driving suspected'],
-      prevention: 'Extended amber signal duration at this intersection and red-light cameras',
-    },
-    {
-      id: 'ac-3',
-      cause: 'Insufficient Following Distance',
-      confidence: 89,
-      contributing: ['High traffic density', 'Sudden braking of lead vehicle'],
-      prevention: 'AI-powered congestion warnings and adaptive cruise control advisories',
-    },
-  ]);
 
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -113,6 +110,7 @@ export default function AccidentAnalysisPage() {
       setVideoUrl(URL.createObjectURL(file));
       setAnalysisComplete(false);
       setAnalysisProgress(0);
+      setAnalysisData(null);
     }
   }, []);
 
@@ -124,6 +122,7 @@ export default function AccidentAnalysisPage() {
       setVideoUrl(URL.createObjectURL(file));
       setAnalysisComplete(false);
       setAnalysisProgress(0);
+      setAnalysisData(null);
     }
   }, []);
 
@@ -131,29 +130,99 @@ export default function AccidentAnalysisPage() {
     event.preventDefault();
   }, []);
 
-  const startAnalysis = useCallback(() => {
+  const startAnalysis = useCallback(async () => {
+    if (!videoFile) return;
+
     setIsAnalyzing(true);
     setAnalysisProgress(0);
 
-    // Simulate AI analysis progress
-    const interval = setInterval(() => {
+    // Progress animation
+    const progressInterval = setInterval(() => {
       setAnalysisProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsAnalyzing(false);
-          setAnalysisComplete(true);
-          return 100;
-        }
+        if (prev >= 90) return 90;
         return prev + Math.random() * 8 + 2;
       });
-    }, 200);
-  }, []);
+    }, 300);
+
+    try {
+      // First create a record in the database
+      const { data: insertData, error: insertError } = await supabase
+        .from('video_analyses')
+        .insert({
+          video_name: videoFile.name,
+          video_size: videoFile.size,
+          video_type: videoFile.type,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Failed to create analysis record:', insertError);
+        throw new Error('Failed to start analysis');
+      }
+
+      // Call the AI analysis edge function
+      const { data, error } = await supabase.functions.invoke('analyze-video', {
+        body: {
+          videoName: videoFile.name,
+          videoSize: videoFile.size,
+          videoType: videoFile.type,
+          analysisId: insertData.id,
+        },
+      });
+
+      clearInterval(progressInterval);
+
+      if (error) {
+        console.error('Analysis error:', error);
+        throw new Error(error.message || 'Analysis failed');
+      }
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setAnalysisProgress(100);
+      setAnalysisData(data.analysis);
+
+      // Generate key frames from timeline events
+      const frames: KeyFrame[] = data.analysis.timeline_events
+        .filter((e: TimelineEvent) => e.severity === 'high' || e.severity === 'critical')
+        .slice(-4)
+        .map((event: TimelineEvent, index: number) => ({
+          id: `kf-${index}`,
+          timestamp: parseFloat(event.timestamp.replace(':', '.')) || index * 2,
+          thumbnail: '',
+          description: event.event,
+          riskLevel: event.severity,
+        }));
+      setKeyFrames(frames);
+
+      setAnalysisComplete(true);
+      toast.success('AI analysis complete!', {
+        description: `Primary cause: ${data.analysis.primary_cause}`,
+      });
+
+    } catch (error) {
+      clearInterval(progressInterval);
+      console.error('Analysis failed:', error);
+      toast.error('Analysis failed', {
+        description: error instanceof Error ? error.message : 'Please try again',
+      });
+      setAnalysisProgress(0);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [videoFile]);
 
   const clearVideo = useCallback(() => {
     setVideoFile(null);
     setVideoUrl(null);
     setAnalysisComplete(false);
     setAnalysisProgress(0);
+    setAnalysisData(null);
+    setKeyFrames([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -234,7 +303,7 @@ export default function AccidentAnalysisPage() {
               Accident Video Analysis
             </h1>
             <p className="text-muted-foreground mt-1">
-              Computer vision & behavior analysis to detect accident causes and prevention insights
+              Powered by Lovable AI — Computer vision & behavior analysis
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -318,13 +387,13 @@ export default function AccidentAnalysisPage() {
                           className="absolute inset-0 bg-background/90 backdrop-blur-sm flex flex-col items-center justify-center"
                         >
                           <div className="w-20 h-20 rounded-2xl bg-primary/20 flex items-center justify-center mb-6">
-                            <Brain className="w-10 h-10 text-primary animate-pulse" />
+                            <Loader2 className="w-10 h-10 text-primary animate-spin" />
                           </div>
                           <h3 className="text-lg font-semibold text-foreground mb-2">
-                            Analyzing Video...
+                            AI Analyzing Video...
                           </h3>
-                          <p className="text-muted-foreground text-sm mb-6">
-                            AI is detecting vehicles, patterns, and risky behaviors
+                          <p className="text-muted-foreground text-sm mb-6 text-center max-w-sm">
+                            Lovable AI is detecting vehicles, speed patterns, lane changes, and risky behaviors
                           </p>
                           <div className="w-64">
                             <Progress value={analysisProgress} className="h-2" />
@@ -337,30 +406,35 @@ export default function AccidentAnalysisPage() {
                     </AnimatePresence>
 
                     {/* Detection Overlays (when analysis complete) */}
-                    {analysisComplete && (
+                    {analysisComplete && analysisData && (
                       <div className="absolute inset-0 pointer-events-none">
-                        {/* Simulated detection boxes */}
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="absolute border-2 border-destructive rounded"
-                          style={{ left: '30%', top: '40%', width: '15%', height: '20%' }}
-                        >
-                          <div className="absolute -top-6 left-0 bg-destructive/90 text-destructive-foreground text-[10px] px-2 py-0.5 rounded">
-                            Vehicle 1 - High Risk
-                          </div>
-                        </motion.div>
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.1 }}
-                          className="absolute border-2 border-warning rounded"
-                          style={{ left: '55%', top: '45%', width: '12%', height: '18%' }}
-                        >
-                          <div className="absolute -top-6 left-0 bg-warning/90 text-warning-foreground text-[10px] px-2 py-0.5 rounded">
-                            Vehicle 2 - Moderate
-                          </div>
-                        </motion.div>
+                        {analysisData.detected_vehicles.slice(0, 2).map((vehicle, index) => (
+                          <motion.div
+                            key={index}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.1 }}
+                            className={`absolute border-2 rounded ${
+                              vehicle.speed_estimate === 'Very High' || vehicle.speed_estimate === 'High'
+                                ? 'border-destructive'
+                                : 'border-warning'
+                            }`}
+                            style={{ 
+                              left: `${25 + index * 25}%`, 
+                              top: `${35 + index * 10}%`, 
+                              width: `${15 - index * 3}%`, 
+                              height: `${20 - index * 2}%` 
+                            }}
+                          >
+                            <div className={`absolute -top-6 left-0 text-[10px] px-2 py-0.5 rounded ${
+                              vehicle.speed_estimate === 'Very High' || vehicle.speed_estimate === 'High'
+                                ? 'bg-destructive/90 text-destructive-foreground'
+                                : 'bg-warning/90 text-warning-foreground'
+                            }`}>
+                              {vehicle.type} - {vehicle.speed_estimate}
+                            </div>
+                          </motion.div>
+                        ))}
                       </div>
                     )}
 
@@ -419,7 +493,7 @@ export default function AccidentAnalysisPage() {
             )}
 
             {/* Key Frames */}
-            {analysisComplete && (
+            {analysisComplete && keyFrames.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -429,11 +503,11 @@ export default function AccidentAnalysisPage() {
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
                       <Clock className="w-4 h-4 text-primary" />
-                      Key Frames Before Impact
+                      Key Events Timeline
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {keyFrames.map((frame, index) => (
                         <motion.div
                           key={frame.id}
@@ -463,6 +537,29 @@ export default function AccidentAnalysisPage() {
                 </Card>
               </motion.div>
             )}
+
+            {/* AI Insights Paragraph */}
+            {analysisComplete && analysisData?.ai_insights && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <Card className="border-primary/20">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Brain className="w-4 h-4 text-primary" />
+                      AI Analysis Summary
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                      {analysisData.ai_insights}
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
           </motion.div>
 
           {/* Analysis Results Panel */}
@@ -481,61 +578,94 @@ export default function AccidentAnalysisPage() {
                   }`}>
                     {analysisComplete ? (
                       <CheckCircle className="w-5 h-5 text-success" />
+                    ) : isAnalyzing ? (
+                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
                     ) : (
                       <Brain className="w-5 h-5 text-muted-foreground" />
                     )}
                   </div>
                   <div>
                     <p className="font-semibold text-sm text-foreground">
-                      {analysisComplete ? 'Analysis Complete' : 'Ready to Analyze'}
+                      {analysisComplete ? 'Analysis Complete' : isAnalyzing ? 'Processing...' : 'Ready to Analyze'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {analysisComplete ? `${analysisResults.length} events detected` : 'Upload a video to begin'}
+                      {analysisComplete && analysisData 
+                        ? `${analysisData.timeline_events?.length || 0} events detected` 
+                        : 'Upload a video to begin'}
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
+            {/* Primary Cause */}
+            {analysisComplete && analysisData && (
+              <Card className="border-destructive/30 bg-destructive/5">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-destructive" />
+                    Primary Accident Cause
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-bold text-foreground">{analysisData.primary_cause}</span>
+                      <Badge variant="destructive" className="text-xs">
+                        {analysisData.primary_cause_confidence}% confident
+                      </Badge>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${analysisData.primary_cause_confidence}%` }}
+                        transition={{ delay: 0.5, duration: 0.5 }}
+                        className="h-full bg-destructive"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Detected Events Timeline */}
-            {analysisComplete && (
+            {analysisComplete && analysisData?.timeline_events && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-primary" />
-                    Detected Events
+                    Event Timeline
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {analysisResults.map((result, index) => (
+                <CardContent className="space-y-2 max-h-[250px] overflow-y-auto">
+                  {analysisData.timeline_events.map((event, index) => (
                     <motion.div
-                      key={result.id}
+                      key={index}
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.4 + index * 0.05 }}
-                      onClick={() => seekToTimestamp(result.timestamp)}
-                      className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors border border-transparent hover:border-primary/20"
+                      className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border border-transparent hover:border-primary/20"
                     >
                       <div className="flex items-start gap-3">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          result.severity === 'critical' ? 'bg-destructive/20 text-destructive' :
-                          result.severity === 'high' ? 'bg-destructive/15 text-destructive' :
-                          result.severity === 'medium' ? 'bg-warning/20 text-warning' :
+                          event.severity === 'critical' ? 'bg-destructive/20 text-destructive' :
+                          event.severity === 'high' ? 'bg-destructive/15 text-destructive' :
+                          event.severity === 'medium' ? 'bg-warning/20 text-warning' :
                           'bg-success/20 text-success'
                         }`}>
-                          {getTypeIcon(result.type)}
+                          {getTypeIcon(event.severity)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <span className="text-xs font-mono text-muted-foreground">
-                              {result.timestamp.toFixed(1)}s
+                              {event.timestamp}
                             </span>
-                            <Badge variant={getSeverityColor(result.severity)} className="text-[9px]">
-                              {result.confidence}%
+                            <Badge variant={getSeverityColor(event.severity)} className="text-[9px]">
+                              {event.severity}
                             </Badge>
                           </div>
                           <p className="text-xs text-foreground line-clamp-2">
-                            {result.description}
+                            {event.event}
                           </p>
                         </div>
                       </div>
@@ -545,47 +675,39 @@ export default function AccidentAnalysisPage() {
               </Card>
             )}
 
-            {/* AI Insights - Accident Causes */}
-            {analysisComplete && (
+            {/* Secondary Factors */}
+            {analysisComplete && analysisData?.secondary_factors && (
               <Card className="border-primary/20">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <Zap className="w-4 h-4 text-primary" />
-                    AI-Identified Causes
+                    Contributing Factors
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {accidentCauses.map((cause, index) => (
+                  {analysisData.secondary_factors.map((factor, index) => (
                     <motion.div
-                      key={cause.id}
+                      key={index}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.5 + index * 0.1 }}
                       className="space-y-2"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground">{cause.cause}</span>
+                        <span className="text-sm font-medium text-foreground">{factor.factor}</span>
                         <Badge variant="default" className="text-[10px]">
-                          {cause.confidence}% confidence
+                          {factor.confidence}%
                         </Badge>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: `${cause.confidence}%` }}
+                          animate={{ width: `${factor.confidence}%` }}
                           transition={{ delay: 0.7 + index * 0.1, duration: 0.5 }}
                           className="h-full bg-primary"
                         />
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] text-muted-foreground">Contributing factors:</p>
-                        {cause.contributing.map((factor, i) => (
-                          <div key={i} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <ChevronRight className="w-3 h-3" />
-                            {factor}
-                          </div>
-                        ))}
-                      </div>
+                      <p className="text-[10px] text-muted-foreground">{factor.description}</p>
                     </motion.div>
                   ))}
                 </CardContent>
@@ -593,25 +715,28 @@ export default function AccidentAnalysisPage() {
             )}
 
             {/* Prevention Recommendations */}
-            {analysisComplete && (
+            {analysisComplete && analysisData?.prevention_recommendations && (
               <Card className="border-success/20 bg-success/5">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
                     <Shield className="w-4 h-4 text-success" />
-                    Prevention Insights
+                    Prevention Recommendations
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {accidentCauses.map((cause, index) => (
+                  {analysisData.prevention_recommendations.map((rec, index) => (
                     <motion.div
-                      key={`prev-${cause.id}`}
+                      key={index}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: 0.8 + index * 0.1 }}
                       className="flex items-start gap-2"
                     >
                       <CheckCircle className="w-4 h-4 text-success flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground">{cause.prevention}</p>
+                      <div>
+                        <p className="text-xs font-medium text-foreground">{rec.title}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{rec.description}</p>
+                      </div>
                     </motion.div>
                   ))}
                 </CardContent>
