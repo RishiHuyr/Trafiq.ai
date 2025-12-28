@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Sparkles,
   Activity,
+  Video,
 } from 'lucide-react';
 
 interface SidebarLink {
@@ -29,6 +30,7 @@ const mainLinks: SidebarLink[] = [
   { icon: <Camera className="w-5 h-5" />, label: 'Live Feeds', href: '/feeds' },
   { icon: <TrendingUp className="w-5 h-5" />, label: 'Analytics', href: '/analytics' },
   { icon: <Sparkles className="w-5 h-5" />, label: 'AI Insights', href: '/insights' },
+  { icon: <Video className="w-5 h-5" />, label: 'Video Analysis', href: '/accident-analysis' },
   { icon: <Bell className="w-5 h-5" />, label: 'Alerts', href: '/alerts', badge: 4 },
 ];
 
