@@ -12,6 +12,19 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
+        // TRAFIQ.AI Risk Variants
+        riskLow: "border-success/30 bg-success/20 text-success",
+        riskMedium: "border-warning/30 bg-warning/20 text-warning",
+        riskHigh: "border-destructive/30 bg-destructive/20 text-destructive",
+        riskCritical: "border-destructive/50 bg-destructive/30 text-destructive animate-pulse",
+        // Status Variants
+        online: "border-success/30 bg-success/20 text-success",
+        offline: "border-muted-foreground/30 bg-muted text-muted-foreground",
+        processing: "border-primary/30 bg-primary/20 text-primary animate-pulse",
+        // Alert Variants
+        alertWarning: "border-warning/30 bg-warning/20 text-warning",
+        alertDanger: "border-destructive/30 bg-destructive/20 text-destructive",
+        alertInfo: "border-primary/30 bg-primary/20 text-primary",
       },
     },
     defaultVariants: {
