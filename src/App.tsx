@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
 import RiskMapPage from "./pages/RiskMapPage";
@@ -12,6 +13,7 @@ import AIInsightsPage from "./pages/AIInsightsPage";
 import AlertsPage from "./pages/AlertsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccidentAnalysisPage from "./pages/AccidentAnalysisPage";
+import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,15 +25,16 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/auth" element={<AuthPage />} />
           <Route path="/landing" element={<LandingPage />} />
-          <Route path="/map" element={<RiskMapPage />} />
-          <Route path="/feeds" element={<LiveFeedsPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/insights" element={<AIInsightsPage />} />
-          <Route path="/alerts" element={<AlertsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/accident-analysis" element={<AccidentAnalysisPage />} />
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/map" element={<ProtectedRoute><RiskMapPage /></ProtectedRoute>} />
+          <Route path="/feeds" element={<ProtectedRoute><LiveFeedsPage /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+          <Route path="/insights" element={<ProtectedRoute><AIInsightsPage /></ProtectedRoute>} />
+          <Route path="/alerts" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/accident-analysis" element={<ProtectedRoute><AccidentAnalysisPage /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
