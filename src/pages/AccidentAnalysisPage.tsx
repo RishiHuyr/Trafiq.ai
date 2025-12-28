@@ -200,6 +200,26 @@ export default function AccidentAnalysisPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Ethical Disclaimer Banner */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 rounded-xl bg-primary/10 border border-primary/20 backdrop-blur-sm"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-sm text-foreground">AI-Assisted Analysis • For Awareness Only</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                This tool provides AI-generated insights to help understand accident patterns and improve road safety. 
+                <span className="text-primary font-medium"> No automated blame or enforcement</span> — all findings are for educational and safety improvement purposes only.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -208,23 +228,27 @@ export default function AccidentAnalysisPage() {
         >
           <div>
             <h1 className="text-2xl font-display font-bold text-foreground flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                <Brain className="w-5 h-5 text-primary" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
+                <Brain className="w-5 h-5 text-primary-foreground" />
               </div>
-              Accident Cause Analysis
+              Accident Video Analysis
             </h1>
             <p className="text-muted-foreground mt-1">
-              AI-powered video analysis to identify accident causes and prevention insights
+              Computer vision & behavior analysis to detect accident causes and prevention insights
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="gap-1 bg-card/50">
               <Shield className="w-3 h-3" />
               Human-in-the-Loop
             </Badge>
-            <Badge variant="outline" className="gap-1">
+            <Badge variant="outline" className="gap-1 bg-card/50">
               <Eye className="w-3 h-3" />
-              No Facial Recognition
+              Privacy-First
+            </Badge>
+            <Badge variant="outline" className="gap-1 bg-card/50">
+              <AlertCircle className="w-3 h-3" />
+              Explanation-First
             </Badge>
           </div>
         </motion.div>
