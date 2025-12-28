@@ -14,7 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      video_analyses: {
+        Row: {
+          ai_insights: string | null
+          behaviors_detected: Json | null
+          created_at: string
+          detected_vehicles: Json | null
+          id: string
+          prevention_recommendations: Json | null
+          primary_cause: string | null
+          primary_cause_confidence: number | null
+          raw_ai_response: Json | null
+          secondary_factors: Json | null
+          speed_patterns: Json | null
+          status: string
+          timeline_events: Json | null
+          updated_at: string
+          user_id: string | null
+          video_name: string
+          video_size: number | null
+          video_type: string | null
+        }
+        Insert: {
+          ai_insights?: string | null
+          behaviors_detected?: Json | null
+          created_at?: string
+          detected_vehicles?: Json | null
+          id?: string
+          prevention_recommendations?: Json | null
+          primary_cause?: string | null
+          primary_cause_confidence?: number | null
+          raw_ai_response?: Json | null
+          secondary_factors?: Json | null
+          speed_patterns?: Json | null
+          status?: string
+          timeline_events?: Json | null
+          updated_at?: string
+          user_id?: string | null
+          video_name: string
+          video_size?: number | null
+          video_type?: string | null
+        }
+        Update: {
+          ai_insights?: string | null
+          behaviors_detected?: Json | null
+          created_at?: string
+          detected_vehicles?: Json | null
+          id?: string
+          prevention_recommendations?: Json | null
+          primary_cause?: string | null
+          primary_cause_confidence?: number | null
+          raw_ai_response?: Json | null
+          secondary_factors?: Json | null
+          speed_patterns?: Json | null
+          status?: string
+          timeline_events?: Json | null
+          updated_at?: string
+          user_id?: string | null
+          video_name?: string
+          video_size?: number | null
+          video_type?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
