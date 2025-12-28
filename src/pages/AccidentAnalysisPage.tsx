@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
 import {
   Upload,
   Play,
@@ -30,6 +31,7 @@ import {
   Gauge,
   MapPin,
   Loader2,
+  Download,
 } from 'lucide-react';
 
 interface SecondaryFactor {
@@ -246,6 +248,168 @@ export default function AccidentAnalysisPage() {
     }
   }, []);
 
+  const generatePDFReport = useCallback(() => {
+    if (!analysisData || !videoFile) return;
+
+    const pdf = new jsPDF();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    let yPos = 20;
+
+    // Helper function for text wrapping
+    const addWrappedText = (text: string, x: number, y: number, maxWidth: number, lineHeight: number = 6) => {
+      const lines = pdf.splitTextToSize(text, maxWidth);
+      lines.forEach((line: string) => {
+        if (y > 270) {
+          pdf.addPage();
+          y = 20;
+        }
+        pdf.text(line, x, y);
+        y += lineHeight;
+      });
+      return y;
+    };
+
+    // Title
+    pdf.setFontSize(24);
+    pdf.setTextColor(59, 130, 246);
+    pdf.text('TRAFIQ.AI', 20, yPos);
+    yPos += 10;
+    
+    pdf.setFontSize(18);
+    pdf.setTextColor(0, 0, 0);
+    pdf.text('Accident Video Analysis Report', 20, yPos);
+    yPos += 15;
+
+    // Disclaimer
+    pdf.setFontSize(9);
+    pdf.setTextColor(100, 100, 100);
+    yPos = addWrappedText(
+      'DISCLAIMER: This is an AI-assisted analysis for awareness and safety improvement purposes only. No automated blame or enforcement. All findings are educational.',
+      20, yPos, pageWidth - 40, 5
+    );
+    yPos += 10;
+
+    // Video Info
+    pdf.setFontSize(12);
+    pdf.setTextColor(0, 0, 0);
+    pdf.text('Video Information', 20, yPos);
+    yPos += 7;
+    pdf.setFontSize(10);
+    pdf.setTextColor(60, 60, 60);
+    pdf.text(`File: ${videoFile.name}`, 25, yPos);
+    yPos += 5;
+    pdf.text(`Size: ${(videoFile.size / 1024 / 1024).toFixed(2)} MB`, 25, yPos);
+    yPos += 5;
+    pdf.text(`Date: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 25, yPos);
+    yPos += 12;
+
+    // Primary Cause Section
+    pdf.setFontSize(14);
+    pdf.setTextColor(220, 38, 38);
+    pdf.text('PRIMARY ACCIDENT CAUSE', 20, yPos);
+    yPos += 8;
+    pdf.setFontSize(16);
+    pdf.setTextColor(0, 0, 0);
+    pdf.text(`${analysisData.primary_cause} (${analysisData.primary_cause_confidence}% confidence)`, 20, yPos);
+    yPos += 12;
+
+    // Secondary Factors
+    if (analysisData.secondary_factors?.length > 0) {
+      pdf.setFontSize(14);
+      pdf.setTextColor(59, 130, 246);
+      pdf.text('Contributing Factors', 20, yPos);
+      yPos += 8;
+      pdf.setFontSize(10);
+      pdf.setTextColor(60, 60, 60);
+      analysisData.secondary_factors.forEach((factor) => {
+        pdf.text(`• ${factor.factor} (${factor.confidence}%)`, 25, yPos);
+        yPos += 5;
+        yPos = addWrappedText(`  ${factor.description}`, 25, yPos, pageWidth - 50, 5);
+        yPos += 3;
+      });
+      yPos += 7;
+    }
+
+    // Timeline Events
+    if (analysisData.timeline_events?.length > 0) {
+      if (yPos > 200) {
+        pdf.addPage();
+        yPos = 20;
+      }
+      pdf.setFontSize(14);
+      pdf.setTextColor(59, 130, 246);
+      pdf.text('Event Timeline', 20, yPos);
+      yPos += 8;
+      pdf.setFontSize(10);
+      pdf.setTextColor(60, 60, 60);
+      analysisData.timeline_events.forEach((event) => {
+        const severityColor = event.severity === 'critical' ? [220, 38, 38] : 
+                              event.severity === 'high' ? [234, 88, 12] :
+                              event.severity === 'medium' ? [234, 179, 8] : [34, 197, 94];
+        pdf.setTextColor(severityColor[0], severityColor[1], severityColor[2]);
+        pdf.text(`[${event.timestamp}] ${event.severity.toUpperCase()}`, 25, yPos);
+        pdf.setTextColor(60, 60, 60);
+        yPos += 5;
+        yPos = addWrappedText(`  ${event.event}`, 25, yPos, pageWidth - 50, 5);
+        yPos += 3;
+      });
+      yPos += 7;
+    }
+
+    // AI Insights
+    if (analysisData.ai_insights) {
+      if (yPos > 180) {
+        pdf.addPage();
+        yPos = 20;
+      }
+      pdf.setFontSize(14);
+      pdf.setTextColor(59, 130, 246);
+      pdf.text('AI Analysis Summary', 20, yPos);
+      yPos += 8;
+      pdf.setFontSize(10);
+      pdf.setTextColor(60, 60, 60);
+      yPos = addWrappedText(analysisData.ai_insights, 20, yPos, pageWidth - 40, 5);
+      yPos += 10;
+    }
+
+    // Prevention Recommendations
+    if (analysisData.prevention_recommendations?.length > 0) {
+      if (yPos > 200) {
+        pdf.addPage();
+        yPos = 20;
+      }
+      pdf.setFontSize(14);
+      pdf.setTextColor(34, 197, 94);
+      pdf.text('Prevention Recommendations', 20, yPos);
+      yPos += 8;
+      pdf.setFontSize(10);
+      pdf.setTextColor(60, 60, 60);
+      analysisData.prevention_recommendations.forEach((rec, index) => {
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`${index + 1}. ${rec.title} [${rec.priority}]`, 25, yPos);
+        yPos += 5;
+        pdf.setTextColor(60, 60, 60);
+        yPos = addWrappedText(`   ${rec.description}`, 25, yPos, pageWidth - 50, 5);
+        yPos += 5;
+      });
+    }
+
+    // Footer
+    const pageCount = pdf.internal.pages.length - 1;
+    for (let i = 1; i <= pageCount; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text(`Generated by TRAFIQ.AI - Page ${i} of ${pageCount}`, pageWidth / 2, 285, { align: 'center' });
+    }
+
+    // Save PDF
+    const fileName = `TRAFIQ_Analysis_${videoFile.name.replace(/\.[^/.]+$/, '')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    pdf.save(fileName);
+    toast.success('Report downloaded!', { description: fileName });
+  }, [analysisData, videoFile]);
+
+
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'critical': return 'riskCritical';
@@ -307,6 +471,12 @@ export default function AccidentAnalysisPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {analysisComplete && analysisData && (
+              <Button variant="outline" size="sm" onClick={generatePDFReport} className="gap-2">
+                <Download className="w-4 h-4" />
+                Download Report
+              </Button>
+            )}
             <Badge variant="outline" className="gap-1 bg-card/50">
               <Shield className="w-3 h-3" />
               Human-in-the-Loop
