@@ -13,6 +13,7 @@ import AIInsightsPage from "./pages/AIInsightsPage";
 import AlertsPage from "./pages/AlertsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccidentAnalysisPage from "./pages/AccidentAnalysisPage";
+import ProfilePage from "./pages/ProfilePage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/insights" element={<ProtectedRoute><AIInsightsPage /></ProtectedRoute>} />
           <Route path="/alerts" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/accident-analysis" element={<ProtectedRoute><AccidentAnalysisPage /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
