@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 import {
   LayoutDashboard,
   Map,
@@ -15,6 +16,7 @@ import {
   Sparkles,
   Activity,
   Video,
+  LogOut,
 } from 'lucide-react';
 
 interface SidebarLink {
@@ -41,6 +43,7 @@ const secondaryLinks: SidebarLink[] = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { signOut } = useAuth();
   
   return (
     <motion.aside
@@ -146,6 +149,17 @@ export function Sidebar() {
             </NavLink>
           );
         })}
+        
+        {/* Logout button */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full mt-2 justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={signOut}
+        >
+          <LogOut className="w-4 h-4" />
+          {!collapsed && <span className="ml-2 text-xs">Logout</span>}
+        </Button>
         
         {/* Collapse button */}
         <Button
