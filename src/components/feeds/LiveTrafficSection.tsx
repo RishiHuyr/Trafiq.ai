@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Video, Cpu, Shield, Info } from 'lucide-react';
@@ -38,6 +39,8 @@ const trafficFeeds = [
 ];
 
 export default function LiveTrafficSection() {
+  const [activeFeedId, setActiveFeedId] = useState(trafficFeeds[0]?.id ?? null);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -121,6 +124,9 @@ export default function LiveTrafficSection() {
               cameraId={feed.id}
               cameraName={feed.name}
               location={feed.location}
+              aiEnabled={activeFeedId === feed.id}
+              isActive={activeFeedId === feed.id}
+              onActivate={() => setActiveFeedId(feed.id)}
             />
           </motion.div>
         ))}
