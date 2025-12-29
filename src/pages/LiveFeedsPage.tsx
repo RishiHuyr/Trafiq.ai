@@ -16,6 +16,7 @@ import {
 import { cameraFeeds } from '@/lib/mockData';
 import { useState } from 'react';
 import EnhancedCameraFeed from '@/components/feeds/EnhancedCameraFeed';
+import LiveTrafficSection from '@/components/feeds/LiveTrafficSection';
 
 export default function LiveFeedsPage() {
   const [layout, setLayout] = useState<'grid' | 'featured'>('grid');
@@ -23,7 +24,22 @@ export default function LiveFeedsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
+        {/* Live Traffic Feed Section */}
+        <LiveTrafficSection />
+
+        {/* Divider */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-border" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="bg-background px-4 text-xs text-muted-foreground uppercase tracking-wider">
+              Additional Camera Feeds
+            </span>
+          </div>
+        </div>
+
         {/* Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
@@ -31,11 +47,11 @@ export default function LiveFeedsPage() {
           className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
         >
           <div>
-            <h1 className="text-2xl font-display font-bold text-foreground">
-              Live Camera Feeds
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Real-time monitoring with AI-powered risk detection and clean overlays
+            <h2 className="text-xl font-display font-bold text-foreground">
+              Static Camera Feeds
+            </h2>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Simulated monitoring with AI-powered risk detection
             </p>
           </div>
           <div className="flex items-center gap-2">
