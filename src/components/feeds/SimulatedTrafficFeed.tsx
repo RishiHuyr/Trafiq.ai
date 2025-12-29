@@ -49,80 +49,69 @@ interface SimulatedTrafficFeedProps {
   location: string;
 }
 
-// Vehicle class configurations with realistic sizes
-const vehicleConfigs = {
-  car: { width: 6, height: 4, minSpeed: 30, maxSpeed: 60, weight: 0.6 },
-  truck: { width: 10, height: 5, minSpeed: 25, maxSpeed: 50, weight: 0.15 },
-  bus: { width: 12, height: 5, minSpeed: 20, maxSpeed: 45, weight: 0.1 },
-  motorcycle: { width: 3, height: 2.5, minSpeed: 35, maxSpeed: 70, weight: 0.15 }
-} as const;
-
-const vehicleTypes = Object.keys(vehicleConfigs) as (keyof typeof vehicleConfigs)[];
+// Car-only detection configuration
+const CAR_CONFIG = {
+  width: { min: 5, max: 7 },
+  height: { min: 3.5, max: 4.5 },
+  minSpeed: 30,
+  maxSpeed: 65
+};
 
 // Predefined lane positions for realistic traffic flow
 const lanes = [
-  { y: 30, direction: 'right' as const },
-  { y: 45, direction: 'right' as const },
-  { y: 55, direction: 'left' as const },
-  { y: 70, direction: 'left' as const }
+  { y: 32, direction: 'right' as const },
+  { y: 48, direction: 'right' as const },
+  { y: 58, direction: 'left' as const },
+  { y: 72, direction: 'left' as const }
 ];
 
-const CONFIDENCE_THRESHOLD = 0.82;
-const MIN_FRAMES_VISIBLE = 3;
+// Strict confidence threshold for car detection only
+const CONFIDENCE_THRESHOLD = 0.88;
+const MIN_FRAMES_VISIBLE = 5;
+const MAX_CARS_PER_LANE = 2;
 
 let globalTrackingId = 0;
 
-function selectVehicleType(): keyof typeof vehicleConfigs {
-  const rand = Math.random();
-  let cumulative = 0;
-  for (const [type, config] of Object.entries(vehicleConfigs)) {
-    cumulative += config.weight;
-    if (rand < cumulative) return type as keyof typeof vehicleConfigs;
-  }
-  return 'car';
-}
-
-function generateVehicle(laneIndex: number): DetectedVehicle {
+function generateCar(laneIndex: number): DetectedVehicle {
   const lane = lanes[laneIndex];
-  const type = selectVehicleType();
-  const config = vehicleConfigs[type];
   
   // Start from edge based on lane direction
-  const startX = lane.direction === 'right' ? -5 : 105;
-  const targetX = lane.direction === 'right' ? 105 : -5;
+  const startX = lane.direction === 'right' ? -8 : 108;
+  const targetX = lane.direction === 'right' ? 108 : -8;
   
-  // Add slight lane variation for realism
-  const yVariation = (Math.random() - 0.5) * 4;
+  // Minimal lane variation for stability
+  const yVariation = (Math.random() - 0.5) * 2;
   
-  const speed = config.minSpeed + Math.random() * (config.maxSpeed - config.minSpeed);
+  // Consistent car sizing
+  const width = CAR_CONFIG.width.min + Math.random() * (CAR_CONFIG.width.max - CAR_CONFIG.width.min);
+  const height = CAR_CONFIG.height.min + Math.random() * (CAR_CONFIG.height.max - CAR_CONFIG.height.min);
   
-  // Risk assessment based on speed and type
+  const speed = CAR_CONFIG.minSpeed + Math.random() * (CAR_CONFIG.maxSpeed - CAR_CONFIG.minSpeed);
+  
+  // Risk assessment based on speed
   let risk: 'low' | 'medium' | 'high' = 'low';
-  const speedRatio = speed / config.maxSpeed;
-  if (speedRatio > 0.9) risk = 'high';
-  else if (speedRatio > 0.75) risk = 'medium';
+  if (speed > 55) risk = 'high';
+  else if (speed > 45) risk = 'medium';
   
-  // Violations only for high-risk vehicles with low probability
+  // Rare violations for realism
   let violation: string | undefined;
-  if (risk === 'high' && Math.random() > 0.7) {
-    violation = ['Speeding', 'Tailgating'][Math.floor(Math.random() * 2)];
-  } else if (risk === 'medium' && Math.random() > 0.85) {
-    violation = 'Lane Drift';
+  if (risk === 'high' && Math.random() > 0.8) {
+    violation = 'Speeding';
   }
   
   globalTrackingId++;
   
   return {
-    id: `v-${globalTrackingId}`,
+    id: `car-${globalTrackingId}`,
     x: startX,
     y: lane.y + yVariation,
     targetX,
     targetY: lane.y + yVariation,
-    width: config.width + (Math.random() - 0.5) * 1,
-    height: config.height + (Math.random() - 0.5) * 0.5,
-    type,
+    width,
+    height,
+    type: 'car',
     risk,
-    confidence: 0.85 + Math.random() * 0.14,
+    confidence: 0.90 + Math.random() * 0.09, // High confidence only
     speed: Math.round(speed),
     direction: lane.direction,
     lane: laneIndex,
@@ -148,38 +137,34 @@ export default function SimulatedTrafficFeed({
 
   // Initialize with vehicles already in frame
   useEffect(() => {
-    const initialVehicles: DetectedVehicle[] = [];
+    const initialCars: DetectedVehicle[] = [];
     lanes.forEach((lane, laneIndex) => {
-      // Add 1-2 vehicles per lane at random positions
-      const count = 1 + Math.floor(Math.random() * 2);
-      for (let i = 0; i < count; i++) {
-        const vehicle = generateVehicle(laneIndex);
-        // Position them within visible area
-        vehicle.x = 15 + Math.random() * 70;
-        vehicle.framesVisible = MIN_FRAMES_VISIBLE + 1;
-        initialVehicles.push(vehicle);
-      }
+      // Add 1 car per lane initially
+      const car = generateCar(laneIndex);
+      // Position within visible area
+      car.x = 20 + Math.random() * 60;
+      car.framesVisible = MIN_FRAMES_VISIBLE + 1;
+      initialCars.push(car);
     });
-    setDetectedVehicles(initialVehicles);
+    setDetectedVehicles(initialCars);
   }, []);
 
-  // Simulate realistic vehicle movement and detection
+  // Simulate car-only detection with stable tracking
   useEffect(() => {
     if (!isPlaying) return;
 
     const interval = setInterval(() => {
       setDetectedVehicles(prev => {
         let updated = prev.map(v => {
-          // Calculate movement based on speed (pixels per frame)
-          const speedFactor = v.speed / 500;
-          const moveX = v.direction === 'right' ? speedFactor * 8 : -speedFactor * 8;
+          // Smooth movement based on speed
+          const speedFactor = v.speed / 600;
+          const moveX = v.direction === 'right' ? speedFactor * 6 : -speedFactor * 6;
           
-          // Smooth interpolation towards target
           const newX = v.x + moveX;
           
-          // Slight confidence fluctuation (stable)
-          const confidenceJitter = (Math.random() - 0.5) * 0.02;
-          const newConfidence = Math.min(0.99, Math.max(0.8, v.confidence + confidenceJitter));
+          // Very stable confidence (minimal jitter)
+          const confidenceJitter = (Math.random() - 0.5) * 0.01;
+          const newConfidence = Math.min(0.99, Math.max(0.88, v.confidence + confidenceJitter));
           
           return {
             ...v,
@@ -189,22 +174,27 @@ export default function SimulatedTrafficFeed({
           };
         });
 
-        // Remove vehicles that have left the frame
-        updated = updated.filter(v => v.x > -10 && v.x < 110);
+        // Remove cars that have left the frame
+        updated = updated.filter(v => v.x > -12 && v.x < 112);
 
-        // Spawn new vehicles with controlled rate (prevent overcrowding)
+        // Spawn new cars with strict control (cars only, no duplicates)
         lanes.forEach((lane, laneIndex) => {
-          const vehiclesInLane = updated.filter(v => v.lane === laneIndex);
-          const lastVehicle = vehiclesInLane[vehiclesInLane.length - 1];
+          const carsInLane = updated.filter(v => v.lane === laneIndex);
           
-          // Only spawn if lane isn't too crowded and there's space
-          const canSpawn = vehiclesInLane.length < 3 && 
-            (!lastVehicle || 
-              (lane.direction === 'right' && lastVehicle.x > 20) ||
-              (lane.direction === 'left' && lastVehicle.x < 80));
+          // Strict spacing check to prevent duplicates
+          const hasSpaceForNew = carsInLane.every(car => {
+            if (lane.direction === 'right') {
+              return car.x > 30; // Must be well into frame
+            } else {
+              return car.x < 70;
+            }
+          });
           
-          if (canSpawn && Math.random() > 0.92) {
-            updated.push(generateVehicle(laneIndex));
+          // Spawn only if lane has room and spacing is clear
+          const canSpawn = carsInLane.length < MAX_CARS_PER_LANE && hasSpaceForNew;
+          
+          if (canSpawn && Math.random() > 0.95) {
+            updated.push(generateCar(laneIndex));
           }
         });
 
@@ -343,9 +333,9 @@ export default function SimulatedTrafficFeed({
                       height: `${vehicle.height}%`,
                     }}
                   >
-                    {/* Vehicle label - only show for confident detections */}
+                    {/* Car label - clean and minimal */}
                     <div className={`absolute -top-5 left-0 px-1.5 py-0.5 text-[9px] font-mono rounded-sm whitespace-nowrap ${getRiskColor(vehicle.risk)}`}>
-                      {vehicle.type.toUpperCase()} {(vehicle.confidence * 100).toFixed(0)}%
+                      CAR {(vehicle.confidence * 100).toFixed(0)}%
                     </div>
                     
                     {/* Violation indicator */}
