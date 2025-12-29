@@ -4,7 +4,7 @@ TRAFIQ.AI is an AI-powered traffic intelligence platform designed to predict tra
 
 🎨 Frontend
 
-The frontend is built using React.js to create a fast, responsive, and interactive dashboard.
+The frontend is built using React.js to create a fast, responsive, and interactive dashboard. 
 It enables smooth visualization of live traffic feeds, uploaded accident videos, analytics charts, alerts, and insights.
 For visual analytics such as trends and statistics, Chart.js is used, while Google Maps API is integrated to display risk zones and user location.
 
