@@ -1,73 +1,51 @@
-# Welcome to your Lovable project
+🚦 TRAFIQ.AI – Smart Traffic Risk Intelligence Platform
 
-## Project info
+TRAFIQ.AI is an AI-powered traffic intelligence platform designed to predict traffic risks, analyze accident causes, and support proactive road safety decisions. The system combines live/simulated traffic feeds, accident video analysis, and data-driven insights while maintaining an ethical, human-in-the-loop approach.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+🎨 Frontend
 
-## How can I edit this code?
+The frontend is built using React.js to create a fast, responsive, and interactive dashboard.
+It enables smooth visualization of live traffic feeds, uploaded accident videos, analytics charts, alerts, and insights.
+For visual analytics such as trends and statistics, Chart.js is used, while Google Maps API is integrated to display risk zones and user location.
 
-There are several ways of editing your application.
+⚙️ Backend
 
-**Use Lovable**
+The backend is developed using Python and FastAPI.
+FastAPI handles video uploads, live feed requests, and AI processing efficiently through REST APIs.
+It also manages communication between the AI modules, database, and frontend dashboard.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+🤖 AI & Computer Vision
 
-Changes made via Lovable will be committed automatically to this repo.
+AI-based analysis is implemented using YOLO for car detection and OpenCV for video frame processing.
+YOLO is configured to detect only cars accurately, while OpenCV is used to read video streams, process frames, and draw stable bounding boxes.
+On top of detection, rule-based logic is applied to analyze risky driving behavior and identify possible accident causes.
 
-**Use your preferred IDE**
+📹 Live Feed & Video Processing
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Live and simulated traffic feeds are handled using RTSP streams.
+These streams are processed using OpenCV and FFmpeg, allowing recorded traffic footage to behave like real-time camera feeds for demonstration and analysis purposes.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+🧠 Accident Video Analysis
 
-Follow these steps:
+When a user uploads an accident video, the backend processes it frame by frame.
+Key frames are extracted, vehicles are detected and tracked, and driving patterns are analyzed.
+Based on this analysis, the system identifies likely causes such as overspeeding, sudden lane changes, or signal violations, and provides prevention insights.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+🗄️ Database
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Supabase is used as the primary database solution.
+It stores structured data such as locations, risk scores, and user inputs, as well as detection logs, AI analysis results, and event timelines in a secure and scalable manner.
 
-# Step 3: Install the necessary dependencies.
-npm i
+☁️ Deployment
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+The application is deployed using Vercel, enabling fast, scalable, and reliable web deployment.
+The architecture is designed to be easily extendable for future cloud or container-based deployments.
 
-**Edit a file directly in GitHub**
+🔐 Ethics & Safety
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+The platform intentionally avoids facial recognition and automated enforcement.
+TRAFIQ.AI is designed to assist traffic authorities with insights, not replace human judgment, ensuring ethical, transparent, and responsible AI usage.
 
-**Use GitHub Codespaces**
+⭐ Vision
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+We don’t analyze accidents — we predict and prevent them using ethical AI.
