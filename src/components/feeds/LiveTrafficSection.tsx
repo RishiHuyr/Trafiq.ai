@@ -70,7 +70,7 @@ export default function LiveTrafficSection() {
               </TooltipProvider>
             </div>
             <p className="text-sm text-muted-foreground">
-              AI-powered vehicle detection and monitoring
+              Car-only detection with grounded bounding boxes
             </p>
           </div>
         </div>
@@ -96,20 +96,12 @@ export default function LiveTrafficSection() {
               Detection Status:
             </span>
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm border-2 border-success shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
-              <span className="text-xs text-muted-foreground">Safe Vehicle</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm border-2 border-warning shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
-              <span className="text-xs text-muted-foreground">Moderate Risk</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm border-2 border-destructive shadow-[0_0_6px_rgba(239,68,68,0.5)]" />
-              <span className="text-xs text-muted-foreground">Violation Detected</span>
+              <div className="w-3 h-3 rounded-sm border-2 border-primary" />
+              <span className="text-xs text-muted-foreground">Car (high confidence)</span>
             </div>
             <div className="h-4 w-px bg-border hidden sm:block" />
             <span className="text-[11px] text-muted-foreground">
-              Hover over vehicles for details • Click Play/Pause to control feed
+              Boxes are filtered to the road region and stabilized across frames
             </span>
           </div>
         </CardContent>

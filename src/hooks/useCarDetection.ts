@@ -12,6 +12,15 @@ type RawDetection = {
   box: { xmin: number; ymin: number; xmax: number; ymax: number };
 };
 
+type NormCarDet = {
+  confidence: number;
+  // Normalized [0..1] box for stable math + validation
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type CarDetection = {
   id: string;
   trackingId: number;
@@ -23,34 +32,158 @@ export type CarDetection = {
   height: number;
 };
 
-type TrackState = CarDetection & {
+type TrackState = {
+  id: string;
+  trackingId: number;
+  confidence: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   hits: number;
   misses: number;
   lastSeenAt: number;
 };
 
-const CAR_LABELS = new Set(["car", "automobile"]);
+type Point = { x: number; y: number };
+
+type RoadRoi = {
+  /** Anything above this (normalized) is treated as non-road/horizon */
+  horizonY: number;
+  /** Road polygon in normalized coordinates (trapezoid works well for fixed cams) */
+  polygon: Point[];
+  /** Simple perspective constraints: expected size increases as box bottom gets closer to frame bottom */
+  perspective: {
+    minHeightAtHorizon: number;
+    maxHeightAtHorizon: number;
+    minHeightAtBottom: number;
+    maxHeightAtBottom: number;
+    minWidthAtHorizon: number;
+    maxWidthAtBottom: number;
+  };
+};
+
+const CAR_LABELS = new Set(["car"]);
 
 // High-confidence car-only defaults
-const DEFAULT_CONFIDENCE = 0.92;
-const DEFAULT_INTERVAL_MS = 350;
+const DEFAULT_CONFIDENCE = 0.93;
+const DEFAULT_INTERVAL_MS = 400;
 
-// Validation tuned for typical traffic footage (relative to frame)
+// Strict box-shape validation (relative to frame)
 const CAR_BOX = {
-  aspectRatio: { min: 1.1, max: 4.8 },
-  area: { min: 0.0025, max: 0.18 }, // 0.25% .. 18% of frame
-  width: { min: 0.03, max: 0.55 },
-  height: { min: 0.02, max: 0.35 },
+  aspectRatio: { min: 1.25, max: 3.8 },
+  area: { min: 0.002, max: 0.16 }, // 0.2% .. 16% of frame
+  width: { min: 0.03, max: 0.6 },
+  height: { min: 0.02, max: 0.38 },
 };
 
-// Tracking / stabilization
+// Tracking / stabilization (object-based only; no motion/optical-flow)
 const TRACK = {
-  matchIou: 0.25,
-  nmsIou: 0.45,
+  matchIou: 0.3,
+  nmsIou: 0.4,
   minHits: 3,
-  maxMisses: 4,
-  smoothAlpha: 0.35,
+  maxMisses: 6,
+  smoothAlpha: 0.25,
+  stableMaxMisses: 2,
 };
+
+const DEFAULT_ROAD_ROI: RoadRoi = {
+  horizonY: 0.55,
+  polygon: [
+    { x: 0.18, y: 0.60 },
+    { x: 0.82, y: 0.60 },
+    { x: 1.0, y: 1.0 },
+    { x: 0.0, y: 1.0 },
+  ],
+  perspective: {
+    minHeightAtHorizon: 0.03,
+    maxHeightAtHorizon: 0.10,
+    minHeightAtBottom: 0.08,
+    maxHeightAtBottom: 0.38,
+    minWidthAtHorizon: 0.04,
+    maxWidthAtBottom: 0.70,
+  },
+};
+
+const ROAD_ROIS: Record<string, RoadRoi> = {
+  // London Street Patrol
+  "CAM-LONDON-001": {
+    horizonY: 0.52,
+    polygon: [
+      { x: 0.14, y: 0.56 },
+      { x: 0.86, y: 0.56 },
+      { x: 1.0, y: 1.0 },
+      { x: 0.0, y: 1.0 },
+    ],
+    perspective: {
+      minHeightAtHorizon: 0.03,
+      maxHeightAtHorizon: 0.10,
+      minHeightAtBottom: 0.08,
+      maxHeightAtBottom: 0.36,
+      minWidthAtHorizon: 0.04,
+      maxWidthAtBottom: 0.68,
+    },
+  },
+  // Canada Winter Traffic
+  "CAM-CANADA-002": {
+    horizonY: 0.54,
+    polygon: [
+      { x: 0.12, y: 0.60 },
+      { x: 0.88, y: 0.60 },
+      { x: 1.0, y: 1.0 },
+      { x: 0.0, y: 1.0 },
+    ],
+    perspective: {
+      minHeightAtHorizon: 0.03,
+      maxHeightAtHorizon: 0.09,
+      minHeightAtBottom: 0.08,
+      maxHeightAtBottom: 0.34,
+      minWidthAtHorizon: 0.04,
+      maxWidthAtBottom: 0.70,
+    },
+  },
+  // Times Square Monitor
+  "CAM-NYC-003": {
+    horizonY: 0.62,
+    polygon: [
+      { x: 0.22, y: 0.68 },
+      { x: 0.78, y: 0.68 },
+      { x: 0.94, y: 1.0 },
+      { x: 0.06, y: 1.0 },
+    ],
+    perspective: {
+      minHeightAtHorizon: 0.028,
+      maxHeightAtHorizon: 0.085,
+      minHeightAtBottom: 0.075,
+      maxHeightAtBottom: 0.32,
+      minWidthAtHorizon: 0.038,
+      maxWidthAtBottom: 0.62,
+    },
+  },
+  // Intersection Control
+  "CAM-INT-004": {
+    horizonY: 0.50,
+    polygon: [
+      { x: 0.16, y: 0.56 },
+      { x: 0.84, y: 0.56 },
+      { x: 1.0, y: 1.0 },
+      { x: 0.0, y: 1.0 },
+    ],
+    perspective: {
+      minHeightAtHorizon: 0.03,
+      maxHeightAtHorizon: 0.10,
+      minHeightAtBottom: 0.08,
+      maxHeightAtBottom: 0.36,
+      minWidthAtHorizon: 0.04,
+      maxWidthAtBottom: 0.70,
+    },
+  },
+};
+
+function getRoi(cameraId?: string): RoadRoi {
+  if (!cameraId) return DEFAULT_ROAD_ROI;
+  return ROAD_ROIS[cameraId] ?? DEFAULT_ROAD_ROI;
+}
 
 let detectorPromise: Promise<any> | null = null;
 function getDetector() {
@@ -62,6 +195,25 @@ function getDetector() {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function pointInPolygon(p: Point, poly: Point[]) {
+  // Ray casting
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x;
+    const yi = poly[i].y;
+    const xj = poly[j].x;
+    const yj = poly[j].y;
+
+    const intersect = yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi + 1e-12) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 function iou(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) {
@@ -87,9 +239,9 @@ function iou(a: { x: number; y: number; width: number; height: number }, b: { x:
   return union <= 0 ? 0 : inter / union;
 }
 
-function nms(dets: CarDetection[], iouThreshold: number) {
+function nms(dets: NormCarDet[], iouThreshold: number) {
   const sorted = [...dets].sort((a, b) => b.confidence - a.confidence);
-  const kept: CarDetection[] = [];
+  const kept: NormCarDet[] = [];
 
   for (const d of sorted) {
     if (kept.every((k) => iou(d, k) < iouThreshold)) kept.push(d);
@@ -97,7 +249,32 @@ function nms(dets: CarDetection[], iouThreshold: number) {
   return kept;
 }
 
-function isValidCarBox(det: CarDetection) {
+function isRoadGrounded(det: NormCarDet, roi: RoadRoi) {
+  const bottomY = det.y + det.height;
+  if (bottomY < roi.horizonY) return false;
+
+  // Ground-plane proxy: bottom edge points must lie on the road polygon.
+  const bottomCenter: Point = { x: det.x + det.width / 2, y: bottomY };
+  const bottomLeft: Point = { x: det.x + det.width * 0.1, y: bottomY };
+  const bottomRight: Point = { x: det.x + det.width * 0.9, y: bottomY };
+
+  return pointInPolygon(bottomCenter, roi.polygon) && pointInPolygon(bottomLeft, roi.polygon) && pointInPolygon(bottomRight, roi.polygon);
+}
+
+function passesPerspective(det: NormCarDet, roi: RoadRoi) {
+  const bottomY = det.y + det.height;
+  const t = clamp((bottomY - roi.horizonY) / Math.max(1e-6, 1 - roi.horizonY), 0, 1);
+
+  const minH = lerp(roi.perspective.minHeightAtHorizon, roi.perspective.minHeightAtBottom, t);
+  const maxH = lerp(roi.perspective.maxHeightAtHorizon, roi.perspective.maxHeightAtBottom, t);
+
+  const minW = lerp(roi.perspective.minWidthAtHorizon, roi.perspective.minWidthAtHorizon * 1.2, t);
+  const maxW = lerp(roi.perspective.maxWidthAtBottom * 0.35, roi.perspective.maxWidthAtBottom, t);
+
+  return det.height >= minH && det.height <= maxH && det.width >= minW && det.width <= maxW;
+}
+
+function isValidCarBox(det: NormCarDet, roi: RoadRoi) {
   const w = det.width;
   const h = det.height;
   if (w <= 0 || h <= 0) return false;
@@ -105,7 +282,7 @@ function isValidCarBox(det: CarDetection) {
   const area = w * h;
   const ar = w / h;
 
-  return (
+  const basicShapeOk =
     ar >= CAR_BOX.aspectRatio.min &&
     ar <= CAR_BOX.aspectRatio.max &&
     area >= CAR_BOX.area.min &&
@@ -113,18 +290,25 @@ function isValidCarBox(det: CarDetection) {
     w >= CAR_BOX.width.min &&
     w <= CAR_BOX.width.max &&
     h >= CAR_BOX.height.min &&
-    h <= CAR_BOX.height.max
-  );
+    h <= CAR_BOX.height.max;
+
+  if (!basicShapeOk) return false;
+  if (!isRoadGrounded(det, roi)) return false;
+  if (!passesPerspective(det, roi)) return false;
+
+  return true;
 }
 
 export function useCarDetection({
   videoRef,
   enabled,
+  cameraId,
   confidenceThreshold = DEFAULT_CONFIDENCE,
   intervalMs = DEFAULT_INTERVAL_MS,
 }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   enabled: boolean;
+  cameraId?: string;
   confidenceThreshold?: number;
   intervalMs?: number;
 }) {
@@ -157,7 +341,10 @@ export function useCarDetection({
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setCars([]);
+      return;
+    }
 
     let cancelled = false;
     let timer: number | undefined;
@@ -171,6 +358,7 @@ export function useCarDetection({
         }
 
         const detector = await getDetector();
+        const roi = getRoi(cameraId);
 
         // Prepare canvas (downscale for speed)
         const targetW = Math.min(640, video.videoWidth);
@@ -194,8 +382,8 @@ export function useCarDetection({
           threshold: confidenceThreshold,
         })) as RawDetection[];
 
-        // Strict: car class only
-        const carDets: CarDetection[] = raw
+        // Strict: "car" only. Everything else is explicitly ignored by omission.
+        const carDets: NormCarDet[] = raw
           .filter((r) => CAR_LABELS.has(String(r.label).toLowerCase()))
           .map((r) => {
             const xmin = clamp(r.box.xmin, 0, targetW);
@@ -209,8 +397,6 @@ export function useCarDetection({
             const height = (ymax - ymin) / targetH;
 
             return {
-              id: "det", // placeholder
-              trackingId: -1,
               confidence: r.score,
               x,
               y,
@@ -219,24 +405,24 @@ export function useCarDetection({
             };
           })
           .filter((d) => d.confidence >= confidenceThreshold)
-          .filter(isValidCarBox);
+          .filter((d) => isValidCarBox(d, roi));
 
-        // Suppress duplicates from model
+        // Suppress duplicate boxes from the model
         const deduped = nms(carDets, TRACK.nmsIou);
 
-        // Tracking for stability
+        // Tracking for stability (one-to-one matching)
         const now = Date.now();
         const tracks = tracksRef.current;
 
-        // Increment misses for all tracks; we will reset on match
         for (const t of tracks.values()) t.misses += 1;
 
-        // Greedy match detections to tracks by IoU
+        const matchedTrackIds = new Set<number>();
         for (const det of deduped) {
           let bestId: number | null = null;
           let bestIoU = 0;
 
           for (const [id, tr] of tracks.entries()) {
+            if (matchedTrackIds.has(id)) continue;
             const score = iou(det, tr);
             if (score > bestIoU) {
               bestIoU = score;
@@ -245,19 +431,16 @@ export function useCarDetection({
           }
 
           if (bestId !== null && bestIoU >= TRACK.matchIou) {
+            matchedTrackIds.add(bestId);
             const tr = tracks.get(bestId)!;
             const a = TRACK.smoothAlpha;
-            const nx = tr.x + a * (det.x - tr.x);
-            const ny = tr.y + a * (det.y - tr.y);
-            const nw = tr.width + a * (det.width - tr.width);
-            const nh = tr.height + a * (det.height - tr.height);
 
             tracks.set(bestId, {
               ...tr,
-              x: nx,
-              y: ny,
-              width: nw,
-              height: nh,
+              x: tr.x + a * (det.x - tr.x),
+              y: tr.y + a * (det.y - tr.y),
+              width: tr.width + a * (det.width - tr.width),
+              height: tr.height + a * (det.height - tr.height),
               confidence: det.confidence,
               hits: tr.hits + 1,
               misses: 0,
@@ -280,7 +463,7 @@ export function useCarDetection({
           }
         }
 
-        // Prune old tracks
+        // Prune stale tracks
         for (const [id, tr] of tracks.entries()) {
           if (tr.misses > TRACK.maxMisses) tracks.delete(id);
         }
@@ -288,7 +471,7 @@ export function useCarDetection({
         // Emit stable tracks only
         const stable = [...tracks.values()]
           .filter((t) => t.hits >= TRACK.minHits)
-          .filter((t) => t.misses <= 1)
+          .filter((t) => t.misses <= TRACK.stableMaxMisses)
           .map((t) => ({
             id: t.id,
             trackingId: t.trackingId,
@@ -313,7 +496,8 @@ export function useCarDetection({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [enabled, intervalMs, confidenceThreshold, videoRef]);
+  }, [enabled, intervalMs, confidenceThreshold, videoRef, cameraId]);
 
   return { cars, isModelLoading, error };
 }
+
