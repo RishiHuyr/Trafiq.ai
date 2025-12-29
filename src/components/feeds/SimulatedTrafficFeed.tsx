@@ -1,92 +1,284 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Play,
-  Pause,
-  Maximize2,
-  Volume2,
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Play, 
+  Pause, 
+  Maximize2, 
+  Volume2, 
   VolumeX,
   Radio,
   Cpu,
   Car,
+  AlertTriangle,
   Eye,
-  Settings,
-} from "lucide-react";
-import { useCarDetection } from "@/hooks/useCarDetection";
+  Settings
+} from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+interface DetectedVehicle {
+  id: string;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  width: number;
+  height: number;
+  type: 'car' | 'truck' | 'motorcycle' | 'bus';
+  risk: 'low' | 'medium' | 'high';
+  confidence: number;
+  speed: number;
+  direction: 'left' | 'right' | 'up' | 'down';
+  lane: number;
+  violation?: string;
+  trackingId: number;
+  framesVisible: number;
+}
 
 interface SimulatedTrafficFeedProps {
   videoSrc: string;
   cameraId: string;
   cameraName: string;
   location: string;
-  /** Enable/disable AI detection for performance (recommended: only 1 active feed at a time). */
-  aiEnabled?: boolean;
-  /** Used for UI highlighting (does not control playback). */
-  isActive?: boolean;
-  /** Called when the user clicks the feed to activate AI for it. */
-  onActivate?: () => void;
+}
+
+// Car-only detection configuration
+const CAR_CONFIG = {
+  width: { min: 5, max: 7 },
+  height: { min: 3.5, max: 4.5 },
+  minSpeed: 30,
+  maxSpeed: 65
+};
+
+// Predefined lane positions for realistic traffic flow
+const lanes = [
+  { y: 32, direction: 'right' as const },
+  { y: 48, direction: 'right' as const },
+  { y: 58, direction: 'left' as const },
+  { y: 72, direction: 'left' as const }
+];
+
+// Strict confidence threshold for car detection only
+const CONFIDENCE_THRESHOLD = 0.88;
+const MIN_FRAMES_VISIBLE = 5;
+const MAX_CARS_PER_LANE = 2;
+
+let globalTrackingId = 0;
+
+function generateCar(laneIndex: number): DetectedVehicle {
+  const lane = lanes[laneIndex];
+  
+  // Start from edge based on lane direction
+  const startX = lane.direction === 'right' ? -8 : 108;
+  const targetX = lane.direction === 'right' ? 108 : -8;
+  
+  // Minimal lane variation for stability
+  const yVariation = (Math.random() - 0.5) * 2;
+  
+  // Consistent car sizing
+  const width = CAR_CONFIG.width.min + Math.random() * (CAR_CONFIG.width.max - CAR_CONFIG.width.min);
+  const height = CAR_CONFIG.height.min + Math.random() * (CAR_CONFIG.height.max - CAR_CONFIG.height.min);
+  
+  const speed = CAR_CONFIG.minSpeed + Math.random() * (CAR_CONFIG.maxSpeed - CAR_CONFIG.minSpeed);
+  
+  // Risk assessment based on speed
+  let risk: 'low' | 'medium' | 'high' = 'low';
+  if (speed > 55) risk = 'high';
+  else if (speed > 45) risk = 'medium';
+  
+  // Rare violations for realism
+  let violation: string | undefined;
+  if (risk === 'high' && Math.random() > 0.8) {
+    violation = 'Speeding';
+  }
+  
+  globalTrackingId++;
+  
+  return {
+    id: `car-${globalTrackingId}`,
+    x: startX,
+    y: lane.y + yVariation,
+    targetX,
+    targetY: lane.y + yVariation,
+    width,
+    height,
+    type: 'car',
+    risk,
+    confidence: 0.90 + Math.random() * 0.09, // High confidence only
+    speed: Math.round(speed),
+    direction: lane.direction,
+    lane: laneIndex,
+    violation,
+    trackingId: globalTrackingId,
+    framesVisible: 0
+  };
 }
 
 export default function SimulatedTrafficFeed({
   videoSrc,
   cameraId,
   cameraName,
-  location,
-  aiEnabled = true,
-  isActive = false,
-  onActivate,
+  location
 }: SimulatedTrafficFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
+  const [detectedVehicles, setDetectedVehicles] = useState<DetectedVehicle[]>([]);
+  const [totalDetections, setTotalDetections] = useState(0);
+  const [violationCount, setViolationCount] = useState(0);
 
-  // Fast car-only detection (disabled on non-active feeds to prevent lag)
-  const { cars, isModelLoading, error } = useCarDetection({
-    videoRef,
-    enabled: isPlaying && aiEnabled,
-    cameraId,
-    confidenceThreshold: 0.75,
-    intervalMs: 250,
-  });
+  // Initialize with vehicles already in frame
+  useEffect(() => {
+    const initialCars: DetectedVehicle[] = [];
+    lanes.forEach((lane, laneIndex) => {
+      // Add 1 car per lane initially
+      const car = generateCar(laneIndex);
+      // Position within visible area
+      car.x = 20 + Math.random() * 60;
+      car.framesVisible = MIN_FRAMES_VISIBLE + 1;
+      initialCars.push(car);
+    });
+    setDetectedVehicles(initialCars);
+  }, []);
 
-  const stats = useMemo(() => {
-    return {
-      total: cars.length,
-      avgConfidence:
-        cars.length > 0 ? cars.reduce((acc, c) => acc + c.confidence, 0) / cars.length : 0,
+  // Simulate car-only detection with stable tracking
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const interval = setInterval(() => {
+      setDetectedVehicles(prev => {
+        let updated = prev.map(v => {
+          // Smooth movement based on speed
+          const speedFactor = v.speed / 600;
+          const moveX = v.direction === 'right' ? speedFactor * 6 : -speedFactor * 6;
+          
+          const newX = v.x + moveX;
+          
+          // Very stable confidence (minimal jitter)
+          const confidenceJitter = (Math.random() - 0.5) * 0.01;
+          const newConfidence = Math.min(0.99, Math.max(0.88, v.confidence + confidenceJitter));
+          
+          return {
+            ...v,
+            x: newX,
+            confidence: newConfidence,
+            framesVisible: v.framesVisible + 1
+          };
+        });
+
+        // Remove cars that have left the frame
+        updated = updated.filter(v => v.x > -12 && v.x < 112);
+
+        // Spawn new cars with strict control (cars only, no duplicates)
+        lanes.forEach((lane, laneIndex) => {
+          const carsInLane = updated.filter(v => v.lane === laneIndex);
+          
+          // Strict spacing check to prevent duplicates
+          const hasSpaceForNew = carsInLane.every(car => {
+            if (lane.direction === 'right') {
+              return car.x > 30; // Must be well into frame
+            } else {
+              return car.x < 70;
+            }
+          });
+          
+          // Spawn only if lane has room and spacing is clear
+          const canSpawn = carsInLane.length < MAX_CARS_PER_LANE && hasSpaceForNew;
+          
+          if (canSpawn && Math.random() > 0.95) {
+            updated.push(generateCar(laneIndex));
+          }
+        });
+
+        // Filter by confidence threshold for display
+        const visible = updated.filter(v => 
+          v.confidence >= CONFIDENCE_THRESHOLD && 
+          v.framesVisible >= MIN_FRAMES_VISIBLE &&
+          v.x > 0 && v.x < 100
+        );
+        
+        setTotalDetections(visible.length);
+        setViolationCount(visible.filter(v => v.violation).length);
+        
+        return updated;
+      });
+    }, 100); // Faster updates for smoother animation
+
+    return () => clearInterval(interval);
+  }, [isPlaying]);
+
+  // Handle video loop and playback
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleEnded = () => {
+      video.currentTime = 0;
+      video.play();
     };
-  }, [cars]);
+
+    video.addEventListener('ended', handleEnded);
+    return () => video.removeEventListener('ended', handleEnded);
+  }, []);
 
   const togglePlayPause = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    if (isPlaying) video.pause();
-    else void video.play();
-
-    setIsPlaying((v) => !v);
+    if (isPlaying) {
+      video.pause();
+    } else {
+      video.play();
+    }
+    setIsPlaying(!isPlaying);
   }, [isPlaying]);
 
   const toggleMute = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     video.muted = !isMuted;
-    setIsMuted((v) => !v);
+    setIsMuted(!isMuted);
   }, [isMuted]);
 
+  const getRiskColor = (risk: string) => {
+    switch (risk) {
+      case 'high': return 'border-destructive bg-destructive/20 text-destructive';
+      case 'medium': return 'border-warning bg-warning/20 text-warning';
+      default: return 'border-success bg-success/20 text-success';
+    }
+  };
+
+  const getRiskBorderColor = (risk: string) => {
+    switch (risk) {
+      case 'high': return 'border-destructive shadow-[0_0_10px_rgba(239,68,68,0.4)]';
+      case 'medium': return 'border-warning shadow-[0_0_8px_rgba(245,158,11,0.3)]';
+      default: return 'border-success shadow-[0_0_6px_rgba(34,197,94,0.3)]';
+    }
+  };
+
+  const stats = useMemo(() => ({
+    total: totalDetections,
+    violations: violationCount,
+    safe: totalDetections - violationCount
+  }), [totalDetections, violationCount]);
+
   return (
-    <Card
-      className="relative overflow-hidden bg-card border-border group cursor-pointer"
+    <Card 
+      className="relative overflow-hidden bg-card border-border group"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={() => onActivate?.()}
     >
       {/* Video Container */}
       <div className="relative aspect-video bg-black overflow-hidden">
+        {/* Video Element */}
         <video
           ref={videoRef}
           src={videoSrc}
@@ -97,64 +289,102 @@ export default function SimulatedTrafficFeed({
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        {/* Subtle processing frame */}
+        {/* AI Processing Overlay */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-4 left-4 w-6 h-6 border-l-2 border-t-2 border-primary/50" />
-          <div className="absolute top-4 right-4 w-6 h-6 border-r-2 border-t-2 border-primary/50" />
-          <div className="absolute bottom-4 left-4 w-6 h-6 border-l-2 border-b-2 border-primary/50" />
-          <div className="absolute bottom-4 right-4 w-6 h-6 border-r-2 border-b-2 border-primary/50" />
+          {/* Scan lines effect */}
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent opacity-30" 
+               style={{ backgroundSize: '100% 4px' }} />
+          
+          {/* Corner brackets */}
+          <div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-primary/60" />
+          <div className="absolute top-4 right-4 w-8 h-8 border-r-2 border-t-2 border-primary/60" />
+          <div className="absolute bottom-4 left-4 w-8 h-8 border-l-2 border-b-2 border-primary/60" />
+          <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/60" />
         </div>
 
-        {/* Car-only Bounding Boxes (keep DOM light to avoid UI lag) */}
-        {cars.map((car) => (
-          <div
-            key={car.id}
-            className="absolute border-2 border-success rounded-sm pointer-events-none shadow-[0_0_8px_rgba(34,197,94,0.5)] transition-[left,top,width,height] duration-100 ease-linear"
-            style={{
-              left: `${car.x}%`,
-              top: `${car.y}%`,
-              width: `${car.width}%`,
-              height: `${car.height}%`,
-            }}
-          >
-            {/* Label at bottom of box */}
-            <div className="absolute -bottom-5 left-0 px-1.5 py-0.5 text-[9px] font-mono rounded-sm whitespace-nowrap bg-success/90 text-success-foreground">
-              CAR {(car.confidence * 100).toFixed(0)}%
-            </div>
+        {/* Detection Bounding Boxes - Only show confident, stable detections */}
+        <AnimatePresence mode="popLayout">
+          {detectedVehicles
+            .filter(v => 
+              v.confidence >= CONFIDENCE_THRESHOLD && 
+              v.framesVisible >= MIN_FRAMES_VISIBLE &&
+              v.x > 2 && v.x < 98
+            )
+            .map((vehicle) => (
+            <TooltipProvider key={vehicle.id}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ 
+                      opacity: 1,
+                      left: `${vehicle.x}%`,
+                      top: `${vehicle.y}%`,
+                    }}
+                    exit={{ opacity: 0 }}
+                    transition={{ 
+                      layout: { duration: 0.1, ease: "linear" },
+                      opacity: { duration: 0.2 }
+                    }}
+                    className={`absolute border-2 rounded-sm pointer-events-auto cursor-pointer ${getRiskBorderColor(vehicle.risk)}`}
+                    style={{
+                      width: `${vehicle.width}%`,
+                      height: `${vehicle.height}%`,
+                    }}
+                  >
+                    {/* Car label - clean and minimal */}
+                    <div className={`absolute -top-5 left-0 px-1.5 py-0.5 text-[9px] font-mono rounded-sm whitespace-nowrap ${getRiskColor(vehicle.risk)}`}>
+                      CAR {(vehicle.confidence * 100).toFixed(0)}%
+                    </div>
+                    
+                    {/* Violation indicator */}
+                    {vehicle.violation && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="absolute -bottom-5 left-0 px-1.5 py-0.5 text-[8px] font-semibold bg-destructive/90 text-destructive-foreground rounded-sm whitespace-nowrap"
+                      >
+                        ⚠ {vehicle.violation}
+                      </motion.div>
+                    )}
 
-            {/* Corner ticks */}
-            <div className="absolute -top-0.5 -left-0.5 w-1.5 h-1.5 border-l border-t border-success" />
-            <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 border-r border-t border-success" />
-            <div className="absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 border-l border-b border-success" />
-            <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 border-r border-b border-success" />
-          </div>
-        ))}
+                    {/* Corner indicators */}
+                    <div className="absolute -top-0.5 -left-0.5 w-2 h-2 border-l border-t border-current" />
+                    <div className="absolute -top-0.5 -right-0.5 w-2 h-2 border-r border-t border-current" />
+                    <div className="absolute -bottom-0.5 -left-0.5 w-2 h-2 border-l border-b border-current" />
+                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 border-r border-b border-current" />
+                  </motion.div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-popover/95 backdrop-blur-sm">
+                  <div className="text-xs space-y-1">
+                    <p className="font-semibold">{vehicle.type.charAt(0).toUpperCase() + vehicle.type.slice(1)}</p>
+                    <p>Speed: {vehicle.speed} km/h</p>
+                    <p>Confidence: {(vehicle.confidence * 100).toFixed(1)}%</p>
+                    <p>Track ID: #{vehicle.trackingId}</p>
+                    {vehicle.violation && <p className="text-destructive">Violation: {vehicle.violation}</p>}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ))}
+        </AnimatePresence>
 
         {/* Status Badges */}
         <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
-          <Badge
-            variant="default"
-            className="bg-destructive/90 text-destructive-foreground backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold"
-          >
+          <Badge variant="default" className="bg-destructive/90 text-destructive-foreground backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold">
             <Radio className="w-3 h-3 mr-1 animate-pulse" />
             LIVE
           </Badge>
-
-          <Badge
-            variant="outline"
-            className="bg-background/80 backdrop-blur-sm text-foreground border-border px-2 py-0.5 text-[10px]"
-          >
+          <Badge variant="outline" className="bg-background/80 backdrop-blur-sm text-foreground border-border px-2 py-0.5 text-[10px]">
             <Cpu className="w-3 h-3 mr-1 text-primary" />
-            {aiEnabled ? (isModelLoading ? "LOADING..." : error ? "ERROR" : "AI ACTIVE") : "AI PAUSED"}
+            AI ACTIVE
           </Badge>
         </div>
 
         {/* Camera ID */}
         <div className="absolute top-3 right-3 z-10">
-          <Badge
-            variant="outline"
-            className="bg-background/80 backdrop-blur-sm text-muted-foreground border-border text-[10px] font-mono"
-          >
+          <Badge variant="outline" className="bg-background/80 backdrop-blur-sm text-muted-foreground border-border text-[10px] font-mono">
             {cameraId}
           </Badge>
         </div>
@@ -165,10 +395,10 @@ export default function SimulatedTrafficFeed({
             <Car className="w-3.5 h-3.5 text-primary" />
             <span className="font-semibold text-foreground">{stats.total}</span>
           </div>
-          {stats.avgConfidence > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-background/80 backdrop-blur-sm rounded text-xs">
-              <span className="text-muted-foreground">Avg</span>
-              <span className="font-semibold text-foreground">{(stats.avgConfidence * 100).toFixed(0)}%</span>
+          {stats.violations > 0 && (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-destructive/80 backdrop-blur-sm rounded text-xs">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span className="font-semibold text-destructive-foreground">{stats.violations}</span>
             </div>
           )}
         </div>
@@ -182,6 +412,7 @@ export default function SimulatedTrafficFeed({
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-20"
             >
+              {/* Center Play/Pause */}
               <div className="absolute inset-0 flex items-center justify-center">
                 <Button
                   variant="glass"
@@ -189,10 +420,15 @@ export default function SimulatedTrafficFeed({
                   onClick={togglePlayPause}
                   className="w-16 h-16 rounded-full bg-background/30 backdrop-blur-md border-white/20 hover:bg-background/50 transition-all"
                 >
-                  {isPlaying ? <Pause className="w-8 h-8 text-white" /> : <Play className="w-8 h-8 text-white ml-1" />}
+                  {isPlaying ? (
+                    <Pause className="w-8 h-8 text-white" />
+                  ) : (
+                    <Play className="w-8 h-8 text-white ml-1" />
+                  )}
                 </Button>
               </div>
 
+              {/* Bottom Controls */}
               <div className="absolute bottom-3 right-3 flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -200,7 +436,11 @@ export default function SimulatedTrafficFeed({
                   onClick={toggleMute}
                   className="w-8 h-8 bg-background/30 backdrop-blur-sm hover:bg-background/50"
                 >
-                  {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
+                  {isMuted ? (
+                    <VolumeX className="w-4 h-4 text-white" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 text-white" />
+                  )}
                 </Button>
                 <Button
                   variant="ghost"
@@ -237,7 +477,6 @@ export default function SimulatedTrafficFeed({
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
           </div>
         </div>
-        {error && <p className="mt-2 text-[11px] text-destructive">{error}</p>}
       </div>
     </Card>
   );
