@@ -22,12 +22,6 @@ interface SimulatedTrafficFeedProps {
   cameraId: string;
   cameraName: string;
   location: string;
-  /** Enable/disable AI detection for performance (recommended: only 1 active feed at a time). */
-  aiEnabled?: boolean;
-  /** Used for UI highlighting (does not control playback). */
-  isActive?: boolean;
-  /** Called when the user clicks the feed to activate AI for it. */
-  onActivate?: () => void;
 }
 
 export default function SimulatedTrafficFeed({
@@ -35,22 +29,19 @@ export default function SimulatedTrafficFeed({
   cameraId,
   cameraName,
   location,
-  aiEnabled = true,
-  isActive = false,
-  onActivate,
 }: SimulatedTrafficFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Fast car-only detection (disabled on non-active feeds to prevent lag)
+  // Fast car-only detection
   const { cars, isModelLoading, error } = useCarDetection({
     videoRef,
-    enabled: isPlaying && aiEnabled,
+    enabled: isPlaying,
     cameraId,
     confidenceThreshold: 0.75,
-    intervalMs: 250,
+    intervalMs: 200,
   });
 
   const stats = useMemo(() => {
@@ -80,10 +71,9 @@ export default function SimulatedTrafficFeed({
 
   return (
     <Card
-      className="relative overflow-hidden bg-card border-border group cursor-pointer"
+      className="relative overflow-hidden bg-card border-border group"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={() => onActivate?.()}
     >
       {/* Video Container */}
       <div className="relative aspect-video bg-black overflow-hidden">
@@ -105,30 +95,36 @@ export default function SimulatedTrafficFeed({
           <div className="absolute bottom-4 right-4 w-6 h-6 border-r-2 border-b-2 border-primary/50" />
         </div>
 
-        {/* Car-only Bounding Boxes (keep DOM light to avoid UI lag) */}
-        {cars.map((car) => (
-          <div
-            key={car.id}
-            className="absolute border-2 border-success rounded-sm pointer-events-none shadow-[0_0_8px_rgba(34,197,94,0.5)] transition-[left,top,width,height] duration-100 ease-linear"
-            style={{
-              left: `${car.x}%`,
-              top: `${car.y}%`,
-              width: `${car.width}%`,
-              height: `${car.height}%`,
-            }}
-          >
-            {/* Label at bottom of box */}
-            <div className="absolute -bottom-5 left-0 px-1.5 py-0.5 text-[9px] font-mono rounded-sm whitespace-nowrap bg-success/90 text-success-foreground">
-              CAR {(car.confidence * 100).toFixed(0)}%
-            </div>
+        {/* Car-only Bounding Boxes - grounded on road */}
+        <AnimatePresence mode="popLayout">
+          {cars.map((car) => (
+            <motion.div
+              key={car.id}
+              layout
+              initial={{ opacity: 0 }}
+              animate={{
+                opacity: 1,
+                left: `${car.x}%`,
+                top: `${car.y}%`,
+              }}
+              exit={{ opacity: 0 }}
+              transition={{ layout: { duration: 0.1, ease: "linear" }, opacity: { duration: 0.15 } }}
+              className="absolute border-2 border-success rounded-sm pointer-events-none shadow-[0_0_8px_rgba(34,197,94,0.5)]"
+              style={{ width: `${car.width}%`, height: `${car.height}%` }}
+            >
+              {/* Label at bottom of box */}
+              <div className="absolute -bottom-5 left-0 px-1.5 py-0.5 text-[9px] font-mono rounded-sm whitespace-nowrap bg-success/90 text-success-foreground">
+                CAR {(car.confidence * 100).toFixed(0)}%
+              </div>
 
-            {/* Corner ticks */}
-            <div className="absolute -top-0.5 -left-0.5 w-1.5 h-1.5 border-l border-t border-success" />
-            <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 border-r border-t border-success" />
-            <div className="absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 border-l border-b border-success" />
-            <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 border-r border-b border-success" />
-          </div>
-        ))}
+              {/* Corner ticks */}
+              <div className="absolute -top-0.5 -left-0.5 w-1.5 h-1.5 border-l border-t border-success" />
+              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 border-r border-t border-success" />
+              <div className="absolute -bottom-0.5 -left-0.5 w-1.5 h-1.5 border-l border-b border-success" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 border-r border-b border-success" />
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
         {/* Status Badges */}
         <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
@@ -145,7 +141,7 @@ export default function SimulatedTrafficFeed({
             className="bg-background/80 backdrop-blur-sm text-foreground border-border px-2 py-0.5 text-[10px]"
           >
             <Cpu className="w-3 h-3 mr-1 text-primary" />
-            {aiEnabled ? (isModelLoading ? "LOADING..." : error ? "ERROR" : "AI ACTIVE") : "AI PAUSED"}
+            {isModelLoading ? "LOADING..." : error ? "ERROR" : "AI ACTIVE"}
           </Badge>
         </div>
 
