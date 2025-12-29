@@ -27,13 +27,19 @@ interface DetectedVehicle {
   id: string;
   x: number;
   y: number;
+  targetX: number;
+  targetY: number;
   width: number;
   height: number;
   type: 'car' | 'truck' | 'motorcycle' | 'bus';
   risk: 'low' | 'medium' | 'high';
   confidence: number;
-  speed?: number;
+  speed: number;
+  direction: 'left' | 'right' | 'up' | 'down';
+  lane: number;
   violation?: string;
+  trackingId: number;
+  framesVisible: number;
 }
 
 interface SimulatedTrafficFeedProps {
@@ -43,25 +49,86 @@ interface SimulatedTrafficFeedProps {
   location: string;
 }
 
-const vehicleTypes = ['car', 'truck', 'motorcycle', 'bus'] as const;
-const riskLevels = ['low', 'medium', 'high'] as const;
-const violations = ['Speeding', 'Lane Violation', 'Running Red', 'Tailgating', null];
+// Vehicle class configurations with realistic sizes
+const vehicleConfigs = {
+  car: { width: 6, height: 4, minSpeed: 30, maxSpeed: 60, weight: 0.6 },
+  truck: { width: 10, height: 5, minSpeed: 25, maxSpeed: 50, weight: 0.15 },
+  bus: { width: 12, height: 5, minSpeed: 20, maxSpeed: 45, weight: 0.1 },
+  motorcycle: { width: 3, height: 2.5, minSpeed: 35, maxSpeed: 70, weight: 0.15 }
+} as const;
 
-function generateRandomVehicle(id: number): DetectedVehicle {
-  const risk = riskLevels[Math.floor(Math.random() * 3)];
+const vehicleTypes = Object.keys(vehicleConfigs) as (keyof typeof vehicleConfigs)[];
+
+// Predefined lane positions for realistic traffic flow
+const lanes = [
+  { y: 30, direction: 'right' as const },
+  { y: 45, direction: 'right' as const },
+  { y: 55, direction: 'left' as const },
+  { y: 70, direction: 'left' as const }
+];
+
+const CONFIDENCE_THRESHOLD = 0.82;
+const MIN_FRAMES_VISIBLE = 3;
+
+let globalTrackingId = 0;
+
+function selectVehicleType(): keyof typeof vehicleConfigs {
+  const rand = Math.random();
+  let cumulative = 0;
+  for (const [type, config] of Object.entries(vehicleConfigs)) {
+    cumulative += config.weight;
+    if (rand < cumulative) return type as keyof typeof vehicleConfigs;
+  }
+  return 'car';
+}
+
+function generateVehicle(laneIndex: number): DetectedVehicle {
+  const lane = lanes[laneIndex];
+  const type = selectVehicleType();
+  const config = vehicleConfigs[type];
+  
+  // Start from edge based on lane direction
+  const startX = lane.direction === 'right' ? -5 : 105;
+  const targetX = lane.direction === 'right' ? 105 : -5;
+  
+  // Add slight lane variation for realism
+  const yVariation = (Math.random() - 0.5) * 4;
+  
+  const speed = config.minSpeed + Math.random() * (config.maxSpeed - config.minSpeed);
+  
+  // Risk assessment based on speed and type
+  let risk: 'low' | 'medium' | 'high' = 'low';
+  const speedRatio = speed / config.maxSpeed;
+  if (speedRatio > 0.9) risk = 'high';
+  else if (speedRatio > 0.75) risk = 'medium';
+  
+  // Violations only for high-risk vehicles with low probability
+  let violation: string | undefined;
+  if (risk === 'high' && Math.random() > 0.7) {
+    violation = ['Speeding', 'Tailgating'][Math.floor(Math.random() * 2)];
+  } else if (risk === 'medium' && Math.random() > 0.85) {
+    violation = 'Lane Drift';
+  }
+  
+  globalTrackingId++;
+  
   return {
-    id: `v-${id}-${Date.now()}`,
-    x: 10 + Math.random() * 70,
-    y: 20 + Math.random() * 50,
-    width: 8 + Math.random() * 8,
-    height: 6 + Math.random() * 6,
-    type: vehicleTypes[Math.floor(Math.random() * vehicleTypes.length)],
+    id: `v-${globalTrackingId}`,
+    x: startX,
+    y: lane.y + yVariation,
+    targetX,
+    targetY: lane.y + yVariation,
+    width: config.width + (Math.random() - 0.5) * 1,
+    height: config.height + (Math.random() - 0.5) * 0.5,
+    type,
     risk,
-    confidence: 0.75 + Math.random() * 0.24,
-    speed: 20 + Math.floor(Math.random() * 60),
-    violation: risk === 'high' ? violations[Math.floor(Math.random() * (violations.length - 1))] as string : 
-               risk === 'medium' && Math.random() > 0.5 ? violations[Math.floor(Math.random() * (violations.length - 1))] as string : 
-               undefined
+    confidence: 0.85 + Math.random() * 0.14,
+    speed: Math.round(speed),
+    direction: lane.direction,
+    lane: laneIndex,
+    violation,
+    trackingId: globalTrackingId,
+    framesVisible: 0
   };
 }
 
@@ -79,43 +146,81 @@ export default function SimulatedTrafficFeed({
   const [totalDetections, setTotalDetections] = useState(0);
   const [violationCount, setViolationCount] = useState(0);
 
-  // Generate initial vehicles
+  // Initialize with vehicles already in frame
   useEffect(() => {
-    const initialVehicles = Array.from({ length: 4 + Math.floor(Math.random() * 4) }, (_, i) => 
-      generateRandomVehicle(i)
-    );
+    const initialVehicles: DetectedVehicle[] = [];
+    lanes.forEach((lane, laneIndex) => {
+      // Add 1-2 vehicles per lane at random positions
+      const count = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < count; i++) {
+        const vehicle = generateVehicle(laneIndex);
+        // Position them within visible area
+        vehicle.x = 15 + Math.random() * 70;
+        vehicle.framesVisible = MIN_FRAMES_VISIBLE + 1;
+        initialVehicles.push(vehicle);
+      }
+    });
     setDetectedVehicles(initialVehicles);
-    setTotalDetections(initialVehicles.length);
-    setViolationCount(initialVehicles.filter(v => v.violation).length);
   }, []);
 
-  // Simulate AI detection updates
+  // Simulate realistic vehicle movement and detection
   useEffect(() => {
     if (!isPlaying) return;
 
     const interval = setInterval(() => {
       setDetectedVehicles(prev => {
-        // Randomly modify existing vehicles (simulate movement)
-        const updated = prev.map(v => ({
-          ...v,
-          x: Math.max(5, Math.min(85, v.x + (Math.random() - 0.5) * 3)),
-          y: Math.max(15, Math.min(75, v.y + (Math.random() - 0.5) * 2)),
-          confidence: Math.min(0.99, Math.max(0.7, v.confidence + (Math.random() - 0.5) * 0.05))
-        }));
+        let updated = prev.map(v => {
+          // Calculate movement based on speed (pixels per frame)
+          const speedFactor = v.speed / 500;
+          const moveX = v.direction === 'right' ? speedFactor * 8 : -speedFactor * 8;
+          
+          // Smooth interpolation towards target
+          const newX = v.x + moveX;
+          
+          // Slight confidence fluctuation (stable)
+          const confidenceJitter = (Math.random() - 0.5) * 0.02;
+          const newConfidence = Math.min(0.99, Math.max(0.8, v.confidence + confidenceJitter));
+          
+          return {
+            ...v,
+            x: newX,
+            confidence: newConfidence,
+            framesVisible: v.framesVisible + 1
+          };
+        });
 
-        // Occasionally add/remove vehicles
-        if (Math.random() > 0.7 && updated.length < 10) {
-          updated.push(generateRandomVehicle(Date.now()));
-        }
-        if (Math.random() > 0.8 && updated.length > 3) {
-          updated.splice(Math.floor(Math.random() * updated.length), 1);
-        }
+        // Remove vehicles that have left the frame
+        updated = updated.filter(v => v.x > -10 && v.x < 110);
 
-        setTotalDetections(updated.length);
-        setViolationCount(updated.filter(v => v.violation).length);
+        // Spawn new vehicles with controlled rate (prevent overcrowding)
+        lanes.forEach((lane, laneIndex) => {
+          const vehiclesInLane = updated.filter(v => v.lane === laneIndex);
+          const lastVehicle = vehiclesInLane[vehiclesInLane.length - 1];
+          
+          // Only spawn if lane isn't too crowded and there's space
+          const canSpawn = vehiclesInLane.length < 3 && 
+            (!lastVehicle || 
+              (lane.direction === 'right' && lastVehicle.x > 20) ||
+              (lane.direction === 'left' && lastVehicle.x < 80));
+          
+          if (canSpawn && Math.random() > 0.92) {
+            updated.push(generateVehicle(laneIndex));
+          }
+        });
+
+        // Filter by confidence threshold for display
+        const visible = updated.filter(v => 
+          v.confidence >= CONFIDENCE_THRESHOLD && 
+          v.framesVisible >= MIN_FRAMES_VISIBLE &&
+          v.x > 0 && v.x < 100
+        );
+        
+        setTotalDetections(visible.length);
+        setViolationCount(visible.filter(v => v.violation).length);
+        
         return updated;
       });
-    }, 800);
+    }, 100); // Faster updates for smoother animation
 
     return () => clearInterval(interval);
   }, [isPlaying]);
@@ -207,26 +312,38 @@ export default function SimulatedTrafficFeed({
           <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/60" />
         </div>
 
-        {/* Detection Bounding Boxes */}
-        <AnimatePresence>
-          {detectedVehicles.map((vehicle) => (
+        {/* Detection Bounding Boxes - Only show confident, stable detections */}
+        <AnimatePresence mode="popLayout">
+          {detectedVehicles
+            .filter(v => 
+              v.confidence >= CONFIDENCE_THRESHOLD && 
+              v.framesVisible >= MIN_FRAMES_VISIBLE &&
+              v.x > 2 && v.x < 98
+            )
+            .map((vehicle) => (
             <TooltipProvider key={vehicle.id}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.3 }}
-                    className={`absolute border-2 rounded-sm pointer-events-auto cursor-pointer ${getRiskBorderColor(vehicle.risk)}`}
-                    style={{
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ 
+                      opacity: 1,
                       left: `${vehicle.x}%`,
                       top: `${vehicle.y}%`,
+                    }}
+                    exit={{ opacity: 0 }}
+                    transition={{ 
+                      layout: { duration: 0.1, ease: "linear" },
+                      opacity: { duration: 0.2 }
+                    }}
+                    className={`absolute border-2 rounded-sm pointer-events-auto cursor-pointer ${getRiskBorderColor(vehicle.risk)}`}
+                    style={{
                       width: `${vehicle.width}%`,
                       height: `${vehicle.height}%`,
                     }}
                   >
-                    {/* Vehicle label */}
+                    {/* Vehicle label - only show for confident detections */}
                     <div className={`absolute -top-5 left-0 px-1.5 py-0.5 text-[9px] font-mono rounded-sm whitespace-nowrap ${getRiskColor(vehicle.risk)}`}>
                       {vehicle.type.toUpperCase()} {(vehicle.confidence * 100).toFixed(0)}%
                     </div>
@@ -234,9 +351,8 @@ export default function SimulatedTrafficFeed({
                     {/* Violation indicator */}
                     {vehicle.violation && (
                       <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: [0.7, 1, 0.7] }}
-                        transition={{ duration: 1, repeat: Infinity }}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
                         className="absolute -bottom-5 left-0 px-1.5 py-0.5 text-[8px] font-semibold bg-destructive/90 text-destructive-foreground rounded-sm whitespace-nowrap"
                       >
                         ⚠ {vehicle.violation}
@@ -255,6 +371,7 @@ export default function SimulatedTrafficFeed({
                     <p className="font-semibold">{vehicle.type.charAt(0).toUpperCase() + vehicle.type.slice(1)}</p>
                     <p>Speed: {vehicle.speed} km/h</p>
                     <p>Confidence: {(vehicle.confidence * 100).toFixed(1)}%</p>
+                    <p>Track ID: #{vehicle.trackingId}</p>
                     {vehicle.violation && <p className="text-destructive">Violation: {vehicle.violation}</p>}
                   </div>
                 </TooltipContent>
