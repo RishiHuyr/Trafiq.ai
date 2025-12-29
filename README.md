@@ -41,11 +41,6 @@ It stores structured data such as locations, risk scores, and user inputs, as we
 The application is deployed using Vercel, enabling fast, scalable, and reliable web deployment.
 The architecture is designed to be easily extendable for future cloud or container-based deployments.
 
-🔐 Ethics & Safety
-
-The platform intentionally avoids facial recognition and automated enforcement.
-TRAFIQ.AI is designed to assist traffic authorities with insights, not replace human judgment, ensuring ethical, transparent, and responsible AI usage.
-
 ⭐ Vision
 
 We don’t analyze accidents — we predict and prevent them using ethical AI.
