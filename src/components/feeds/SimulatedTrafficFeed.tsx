@@ -35,13 +35,13 @@ export default function SimulatedTrafficFeed({
   const [isMuted, setIsMuted] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Strict, object-based, car-only detection (no motion/optical-flow).
+  // Fast car-only detection
   const { cars, isModelLoading, error } = useCarDetection({
     videoRef,
     enabled: isPlaying,
     cameraId,
-    confidenceThreshold: 0.88,
-    intervalMs: 350,
+    confidenceThreshold: 0.75,
+    intervalMs: 200,
   });
 
   const stats = useMemo(() => {

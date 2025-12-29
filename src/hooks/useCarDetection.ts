@@ -45,16 +45,17 @@ type TrackState = {
 // Only detect "car" class - ignore everything else
 const CAR_LABELS = new Set(["car"]);
 
-// Detection settings
-const DEFAULT_CONFIDENCE = 0.88;
-const DEFAULT_INTERVAL_MS = 350;
+// Detection settings - optimized for speed
+const DEFAULT_CONFIDENCE = 0.75;
+const DEFAULT_INTERVAL_MS = 200;
+const TARGET_WIDTH = 320; // Smaller frame = faster processing
 
 // Car box validation (normalized 0-1)
 const CAR_BOX = {
-  aspectRatio: { min: 1.0, max: 4.5 },
-  area: { min: 0.001, max: 0.25 },
-  width: { min: 0.02, max: 0.7 },
-  height: { min: 0.015, max: 0.45 },
+  aspectRatio: { min: 0.8, max: 5.0 },
+  area: { min: 0.0008, max: 0.3 },
+  width: { min: 0.015, max: 0.8 },
+  height: { min: 0.01, max: 0.5 },
 };
 
 // Tracking settings (no motion/optical-flow, pure object tracking)
@@ -217,8 +218,8 @@ export function useCarDetection({
         const detector = await getDetector();
         const roadConfig = getRoadConfig(cameraId);
 
-        // Downscale for speed
-        const targetW = Math.min(640, video.videoWidth);
+        // Downscale aggressively for speed
+        const targetW = Math.min(TARGET_WIDTH, video.videoWidth);
         const scale = targetW / video.videoWidth;
         const targetH = Math.round(video.videoHeight * scale);
 
